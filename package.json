@@ -6,7 +6,9 @@
   "description": "CLI experiment for Tailwind canonical class linting",
   "packageManager": "bun@1.2.10",
   "bin": {
-    "cli-tw": "./dist/cli.js"
+    "cli-tw": "./dist/cli.js",
+    "tw": "./dist/cli.js",
+    "tw-lint": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -20,8 +22,11 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@tailwindcss/language-service": "^0.14.29",
     "commander": "^13.1.0",
-    "fast-glob": "^3.3.3"
+    "fast-glob": "^3.3.3",
+    "tailwindcss": "^4.2.2",
+    "vscode-languageserver-textdocument": "^1.0.12"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
