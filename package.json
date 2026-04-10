@@ -44,5 +44,15 @@
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
   },
-  "module": "index.ts"
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ]
 }
