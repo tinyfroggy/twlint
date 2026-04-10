@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { stat, readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 
 import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
@@ -8,6 +8,7 @@ import { resolveCssEntry } from "../discovery/resolve-css-entry.js";
 import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
 
 import type { CandidateInput, LintResult } from "../types.js";
+import { MAX_FILE_SIZE_BYTES } from "../constants.js";
 
 export async function lintProject(
   patterns: string[],
@@ -31,7 +32,7 @@ export async function lintProject(
   const { state } = await createValidationState(cssEntry);
   const candidates = await collectCandidateInputs(entries);
   const validated = await Promise.all(
-    candidates.map((candidate) => validateCandidate(state, candidate)),
+    candidates.map((candidate) => safeValidate(state, candidate)),
   );
 
   const diagnostics = validated.flat();
@@ -49,10 +50,29 @@ export async function lintProject(
   };
 }
 
+async function safeValidate(
+  state: Awaited<ReturnType<typeof createValidationState>>["state"],
+  candidate: CandidateInput,
+) {
+  try {
+    return await validateCandidate(state, candidate);
+  } catch {
+    process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
+    return [];
+  }
+}
+
 async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]> {
   const candidates = await Promise.all(
     files.map(async (file) => {
-      const text = await readFile(file, "utf8");
+      let text: string;
+      try {
+        const info = await stat(file);
+        if (info.size > MAX_FILE_SIZE_BYTES) return null;
+        text = await readFile(file, "utf8");
+      } catch {
+        return null;
+      }
 
       if (!mightContainTailwindClasses(file, text)) {
         return null;
