@@ -1,0 +1,33 @@
+{
+  "name": "cli-tw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI experiment for Tailwind canonical class linting",
+  "packageManager": "bun@1.2.10",
+  "bin": {
+    "cli-tw": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "bun run src/cli.ts",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "cli",
+    "tailwind",
+    "lint"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "fast-glob": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "@types/bun": "latest"
+  },
+  "module": "index.ts"
+}
