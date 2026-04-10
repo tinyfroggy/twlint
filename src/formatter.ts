@@ -1,12 +1,11 @@
-export type Diagnostic = {
-  file: string;
-  line: number;
-  column: number;
-  rule: string;
-  severity: "warning" | "error";
-  message: string;
+import type { Diagnostic } from "./types.js";
+
+const SEVERITY_LABEL: Record<string, string> = {
+  warning: "warn",
+  error: "error",
 };
 
 export function formatDiagnostic(diagnostic: Diagnostic): string {
-  return `${diagnostic.file}:${diagnostic.line}:${diagnostic.column}  ${diagnostic.severity}  ${diagnostic.message}  (${diagnostic.rule})`;
+  const severity = SEVERITY_LABEL[diagnostic.severity] ?? diagnostic.severity;
+  return `${diagnostic.file}:${diagnostic.line}:${diagnostic.column} ${severity} ${diagnostic.rule} ${diagnostic.message}`;
 }

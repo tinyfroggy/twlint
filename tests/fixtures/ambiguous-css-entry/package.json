@@ -1,0 +1,7 @@
+{
+  "name": "ambiguous-css-entry",
+  "private": true,
+  "dependencies": {
+    "tailwindcss": "^4.2.2"
+  }
+}

@@ -2,60 +2,67 @@
 
 import { Command } from "commander";
 
-import { formatDiagnostic } from "./formatter.js";
-import { scan } from "./scan.js";
+import { lintProject } from "./index.js";
+import { renderPretty } from "./reporters/pretty.js";
 
-const program = new Command();
+import type { LintOptions } from "./types.js";
 
-function configureLintCommand(command: Command): Command {
-  return command
-    .option(
-      "-c, --css-entry <file>",
-      "Tailwind v4 CSS entry file, for example ./src/app.css",
-    )
-    .option("--no-cache", "Disable the persistent cache")
-    .argument("[patterns...]", "Files or glob patterns to scan")
-    .action(runLint);
-}
+async function runLint(patterns: string[], opts: { verbose?: boolean }): Promise<void> {
+  const options: LintOptions = {
+    verbose: opts.verbose ?? false,
+  };
 
-async function runLint(
-  patterns: string[],
-  options: { cssEntry?: string; cache?: boolean },
-) {
-  const result = await scan(patterns, {
-    cssEntry: options.cssEntry,
-    useCache: options.cache,
-  });
-  const diagnostics = result.diagnostics;
+  const result = await lintProject(patterns, options);
 
   if (result.matchedFiles === 0) {
     console.log("No files matched.");
     return;
   }
 
-  if (diagnostics.length === 0) {
-    console.log("No canonical class suggestions found.");
-    return;
+  if (options.verbose) {
+    console.log("Configuration:");
+    console.log(`  Project root: ${result.project.rootDirectory}`);
+    console.log(`  CSS entry:    ${result.project.cssEntryPath ?? "(none)"}`);
+    console.log(
+      `  Tailwind:     ${result.project.tailwindVersion ?? "not found"}${result.project.supported ? "" : " (unsupported)"}`,
+    );
+    console.log();
   }
 
-  for (const diagnostic of diagnostics) {
-    console.log(formatDiagnostic(diagnostic));
-  }
+  console.log(renderPretty(result, options.verbose ?? false));
 
-  console.log(`\nFound ${diagnostics.length} diagnostic(s).`);
+  if (result.diagnostics.length > 0) {
+    process.exitCode = 1;
+  }
 }
+
+const program = new Command();
 
 program
   .name("tw")
-  .description("Print Tailwind canonical class suggestions in the terminal");
+  .description(
+    [
+      "Print Tailwind canonical class suggestions in the terminal.",
+      "",
+      "Examples:",
+      "  tw lint .",
+      "  tw lint apps/web",
+      '  tw lint "src/**/*.{tsx,html}"',
+    ].join("\n"),
+  )
+  .version("0.1.0", "-v, --version", "display the version number")
+  .option("--verbose", "Show file details per rule and configuration info")
+  .argument("[patterns...]", "Files or glob patterns to scan")
+  .action((patterns: string[], opts) => runLint(patterns, opts));
 
-configureLintCommand(program);
+program
+  .command("lint")
+  .alias("l")
+  .description("Lint files for canonical Tailwind classes")
+  .option("--verbose", "Show file details per rule and configuration info")
+  .argument("[patterns...]", "Files or glob patterns to scan")
+  .action((patterns: string[], opts) => runLint(patterns, opts));
 
-configureLintCommand(
-  program
-    .command("lint")
-    .alias("l")
-    .description("Lint files for canonical Tailwind classes"),
-);
+program.addHelpText("after", "\nLearn more: https://github.com/user/tw");
 
 program.parseAsync(process.argv);
