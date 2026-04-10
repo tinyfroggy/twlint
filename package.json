@@ -1,5 +1,5 @@
 {
-  "name": "twlint",
+  "name": "@mrfrog/twlint",
   "version": "0.1.0",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
@@ -31,6 +31,17 @@
     "developer-tools"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tinyfroggy/twlint.git"
+  },
+  "homepage": "https://github.com/tinyfroggy/twlint#readme",
+  "bugs": {
+    "url": "https://github.com/tinyfroggy/twlint/issues"
+  },
   "engines": {
     "node": ">=20"
   },

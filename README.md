@@ -9,14 +9,14 @@ Anyone can contribute to it, fork it, or build their own variant on top of it.
 Once published, developers should be able to run the package directly with `npx`:
 
 ```bash
-npx -y twlint@latest . --verbose
+npx -y @mrfrog/twlint@latest . --verbose
 ```
 
 The CLI also supports the explicit `lint` command:
 
 ```bash
-npx -y twlint@latest lint .
-npx -y twlint@latest lint "src/**/*.{tsx,html}" --verbose
+npx -y @mrfrog/twlint@latest lint .
+npx -y @mrfrog/twlint@latest lint "src/**/*.{tsx,html}" --verbose
 ```
 
 ## Local Development
@@ -86,7 +86,7 @@ twlint lint apps/web
 ## Programmatic API
 
 ```ts
-import { lintProject } from "twlint";
+import { lintProject } from "@mrfrog/twlint";
 
 const result = await lintProject(["."]);
 
