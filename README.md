@@ -1,55 +1,53 @@
-# tw
+# twlint
 
-A Tailwind CSS diagnostic CLI for project-wide canonical class checks. Supports Tailwind v4.
+A fully open source Tailwind CSS diagnostic CLI for project-wide canonical class checks. It is designed to scan a full codebase from the terminal, similar to the `react-doctor` workflow, and currently supports Tailwind v4 projects.
 
-## Install
+Anyone can contribute to it, fork it, or build their own variant on top of it.
+
+## Use It Like `react-doctor`
+
+Once published, developers should be able to run the package directly with `npx`:
 
 ```bash
-bun install
+npx -y twlint@latest . --verbose
 ```
 
-## Quickstart
+The CLI also supports the explicit `lint` command:
 
 ```bash
-# Scan current directory (CSS entry is auto-detected)
-tw lint .
-
-# Scan a specific directory
-tw lint src
-
-# Scan with a glob pattern
-tw lint "src/**/*.{tsx,html}"
-
-# Verbose output with project details
-tw lint . --verbose
+npx -y twlint@latest lint .
+npx -y twlint@latest lint "src/**/*.{tsx,html}" --verbose
 ```
 
-## Development
+## Local Development
 
 ```bash
-bun install
-bun run dev --help
-bun run dev lint .
-bun run build
-bun run test
-bun run check
+npm install
+npm run dev -- --help
+npm run dev -- .
+npm run build
+npm run test
+npm run check
 ```
 
-After building, link the CLI globally:
+To try the built CLI locally:
 
 ```bash
-bun run build
-bun link
-tw lint .
+npm run build
+node dist/cli.js . --verbose
 ```
 
 ## Commands
 
-### `tw lint [patterns...]`
+### `twlint [patterns...]`
+
+When run without a subcommand, `twlint` scans the provided paths or glob patterns.
+
+### `twlint lint [patterns...]`
 
 Lint files for canonical Tailwind classes. This is the primary command.
 
-Aliases: `tw l`, `tw` (when run without a subcommand)
+Alias behavior: `twlint` can be run with or without the `lint` subcommand.
 
 | Option      | Default | Description                            |
 | ----------- | ------- | -------------------------------------- |
@@ -57,7 +55,7 @@ Aliases: `tw l`, `tw` (when run without a subcommand)
 
 ## CSS Entrypoint Discovery
 
-`tw` auto-discovers your CSS entry by searching for files that import `tailwindcss`. It prefers conventional paths like `src/app.css`, `app/globals.css`, and `styles/globals.css`. If multiple candidates are found, it exits with an error.
+`twlint` auto-discovers your CSS entry by searching for files that import `tailwindcss`. It prefers conventional paths like `src/app.css`, `app/globals.css`, and `styles/globals.css`. If multiple candidates are found, it exits with an error.
 
 ## Output
 
@@ -79,16 +77,16 @@ Exit code 1 if any diagnostics are found, 0 otherwise.
 
 ## Monorepo Support
 
-`tw` detects monorepo layouts (npm, pnpm, yarn, nx) and handles them correctly. Run from a package root to scope the scan:
+`twlint` detects monorepo layouts (npm, pnpm, yarn, nx) and handles them correctly. Run from a package root to scope the scan:
 
 ```bash
-tw lint apps/web
+twlint lint apps/web
 ```
 
 ## Programmatic API
 
 ```ts
-import { lintProject } from "cli-tw";
+import { lintProject } from "twlint";
 
 const result = await lintProject(["."]);
 
@@ -132,6 +130,27 @@ console.log(
 | ------------------- | ------- | ------------------------------------------------------------ |
 | `canonical-classes` | On      | Suggests canonical Tailwind class names for arbitrary values |
 
+## Why We Use These Dependencies
+
+This CLI is not a separate Tailwind parser with a completely different rule engine. It reuses Tailwind's existing language tooling and adapts it for terminal-based project scans.
+
+### `@tailwindcss/language-service`
+
+This package provides the Tailwind analysis engine. It is the part that understands Tailwind syntax, project configuration, and class diagnostics.
+
+### `vscode-languageserver-textdocument`
+
+This package provides the document model that the language service expects as input. In the editor, Tailwind diagnostics run against open text documents. In this CLI, we create those documents ourselves from files on disk and pass them into the Tailwind language service.
+
+### Why both are needed
+
+They solve different problems:
+
+1. `@tailwindcss/language-service` does the Tailwind-aware analysis.
+2. `vscode-languageserver-textdocument` represents file contents in the language-server format.
+
+So this project is effectively a CLI wrapper around the Tailwind language tooling, not a second unrelated linter.
+
 ## Architecture
 
 ```
@@ -161,3 +180,31 @@ src/
 ## License
 
 MIT
+
+## Publishing Checklist
+
+Before the first npm publish:
+
+```bash
+npm run check
+npm pack
+```
+
+Recommended final package metadata before publishing:
+
+1. Set the final npm package `name` in `package.json`.
+2. Add `repository`, `homepage`, and `bugs` URLs in `package.json`.
+3. Publish with `npm publish`.
+
+## Contributing
+
+See `CONTRIBUTING.md` for local setup, validation commands, and the preferred pull request flow.
+
+## Open Source
+
+This repository is intended to be easy to contribute to:
+
+1. Standard npm-based setup.
+2. CI runs the same checks contributors run locally.
+3. Husky can run checks before commit.
+4. The codebase stays small and focused so new contributors can understand it quickly.

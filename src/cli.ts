@@ -39,15 +39,15 @@ async function runLint(patterns: string[], opts: { verbose?: boolean }): Promise
 const program = new Command();
 
 program
-  .name("tw")
+  .name("twlint")
   .description(
     [
       "Print Tailwind canonical class suggestions in the terminal.",
       "",
       "Examples:",
-      "  tw lint .",
-      "  tw lint apps/web",
-      '  tw lint "src/**/*.{tsx,html}"',
+      "  twlint lint .",
+      "  twlint lint apps/web",
+      '  twlint lint "src/**/*.{tsx,html}"',
     ].join("\n"),
   )
   .version("0.1.0", "-v, --version", "display the version number")
@@ -62,7 +62,5 @@ program
   .option("--verbose", "Show file details per rule and configuration info")
   .argument("[patterns...]", "Files or glob patterns to scan")
   .action((patterns: string[], opts) => runLint(patterns, opts));
-
-program.addHelpText("after", "\nLearn more: https://github.com/user/tw");
 
 program.parseAsync(process.argv);
