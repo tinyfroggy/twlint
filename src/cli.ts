@@ -50,7 +50,7 @@ program
       '  twlint lint "src/**/*.{tsx,html}"',
     ].join("\n"),
   )
-  .version("0.1.0", "-v, --version", "display the version number")
+  .version("0.1.1", "-v, --version", "display the version number")
   .option("--verbose", "Show file details per rule and configuration info")
   .argument("[patterns...]", "Files or glob patterns to scan")
   .action((patterns: string[], opts) => runLint(patterns, opts));

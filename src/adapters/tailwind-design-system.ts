@@ -31,7 +31,7 @@ export async function loadDesignSystem(cssEntry: string): Promise<LoadedDesignSy
         };
       }
 
-      const stylesheetPath = resolvePackageStylesheet(id);
+      const stylesheetPath = resolvePackageStylesheet(id, base);
       dependencyPaths.add(stylesheetPath);
 
       return {
@@ -60,17 +60,27 @@ async function readStylesheet(stylesheetPath: string, cache: Map<string, string>
   return content;
 }
 
-function resolvePackageStylesheet(id: string): string {
+function resolvePackageStylesheet(id: string, base: string): string {
+  const resolver = createRequire(path.join(base, "__twlinter__.js"));
+
   switch (id) {
     case "tailwindcss":
-      return require.resolve("tailwindcss/index.css");
+      return resolveFromProjectOrFallback(resolver, "tailwindcss/index.css");
     case "tailwindcss/theme":
-      return require.resolve("tailwindcss/theme.css");
+      return resolveFromProjectOrFallback(resolver, "tailwindcss/theme.css");
     case "tailwindcss/preflight":
-      return require.resolve("tailwindcss/preflight.css");
+      return resolveFromProjectOrFallback(resolver, "tailwindcss/preflight.css");
     case "tailwindcss/utilities":
-      return require.resolve("tailwindcss/utilities.css");
+      return resolveFromProjectOrFallback(resolver, "tailwindcss/utilities.css");
     default:
-      return require.resolve(id);
+      return resolveFromProjectOrFallback(resolver, id);
+  }
+}
+
+function resolveFromProjectOrFallback(resolver: NodeJS.Require, request: string): string {
+  try {
+    return resolver.resolve(request);
+  } catch {
+    return require.resolve(request);
   }
 }
