@@ -1,5 +1,5 @@
 {
-  "name": "@mrfrog/twlint",
+  "name": "twlinter",
   "version": "0.1.0",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
