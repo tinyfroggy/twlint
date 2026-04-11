@@ -2,6 +2,8 @@
 
 A fully open source Tailwind CSS diagnostic CLI for project-wide canonical class checks. It is designed to scan a full codebase from the terminal, similar to the `react-doctor` workflow, and currently supports Tailwind v4 projects.
 
+We were inspired by [react-doctor](https://github.com/millionco/react-doctor/tree/main) and [Tailwind CSS IntelliSense](https://github.com/tailwindlabs/tailwindcss-intellisense).
+
 Anyone can contribute to it, fork it, or build their own variant on top of it.
 
 ## Use It Like `react-doctor`
@@ -18,6 +20,8 @@ The CLI also supports the explicit `lint` command:
 npx -y @mrfrog/twlint@latest lint .
 npx -y @mrfrog/twlint@latest lint "src/**/*.{tsx,html}" --verbose
 ```
+
+The npm package is `@mrfrog/twlint`, and the installed CLI command remains `twlint`.
 
 ## Local Development
 
@@ -192,7 +196,7 @@ npm pack
 
 Recommended final package metadata before publishing:
 
-1. Set the final npm package `name` in `package.json`.
+1. Confirm the npm package `name` in `package.json`.
 2. Add `repository`, `homepage`, and `bugs` URLs in `package.json`.
 3. Publish with `npm publish`.
 
