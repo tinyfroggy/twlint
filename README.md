@@ -1,4 +1,4 @@
-# twlint
+# twlinter
 
 A fully open source Tailwind CSS diagnostic CLI for project-wide canonical class checks. It is designed to scan a full codebase from the terminal, similar to the `react-doctor` workflow, and currently supports Tailwind v4 projects.
 
@@ -21,7 +21,7 @@ npx -y twlinter@latest lint .
 npx -y twlinter@latest lint "src/**/*.{tsx,html}" --verbose
 ```
 
-The npm package is `twlinter`, and the installed CLI command remains `twlint`.
+The npm package and installed CLI command are both `twlinter`.
 
 ## Local Development
 
@@ -43,15 +43,15 @@ node dist/cli.js . --verbose
 
 ## Commands
 
-### `twlint [patterns...]`
+### `twlinter [patterns...]`
 
-When run without a subcommand, `twlint` scans the provided paths or glob patterns.
+When run without a subcommand, `twlinter` scans the provided paths or glob patterns.
 
-### `twlint lint [patterns...]`
+### `twlinter lint [patterns...]`
 
 Lint files for canonical Tailwind classes. This is the primary command.
 
-Alias behavior: `twlint` can be run with or without the `lint` subcommand.
+Alias behavior: `twlinter` can be run with or without the `lint` subcommand.
 
 | Option      | Default | Description                            |
 | ----------- | ------- | -------------------------------------- |
@@ -59,7 +59,7 @@ Alias behavior: `twlint` can be run with or without the `lint` subcommand.
 
 ## CSS Entrypoint Discovery
 
-`twlint` auto-discovers your CSS entry by searching for files that import `tailwindcss`. It prefers conventional paths like `src/app.css`, `app/globals.css`, and `styles/globals.css`. If multiple candidates are found, it exits with an error.
+`twlinter` auto-discovers your CSS entry by searching for files that import `tailwindcss`. It prefers conventional paths like `src/app.css`, `app/globals.css`, and `styles/globals.css`. If multiple candidates are found, it exits with an error.
 
 ## Output
 
@@ -81,10 +81,10 @@ Exit code 1 if any diagnostics are found, 0 otherwise.
 
 ## Monorepo Support
 
-`twlint` detects monorepo layouts (npm, pnpm, yarn, nx) and handles them correctly. Run from a package root to scope the scan:
+`twlinter` detects monorepo layouts (npm, pnpm, yarn, nx) and handles them correctly. Run from a package root to scope the scan:
 
 ```bash
-twlint lint apps/web
+twlinter lint apps/web
 ```
 
 ## Programmatic API

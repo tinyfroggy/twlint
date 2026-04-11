@@ -4,7 +4,7 @@
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {
-    "twlint": "dist/cli.js"
+    "twlinter": "dist/cli.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
