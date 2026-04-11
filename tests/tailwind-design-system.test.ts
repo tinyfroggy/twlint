@@ -36,13 +36,26 @@ describe("loadDesignSystem", () => {
       );
       await createFile(
         path.join(packageRoot, "package.json"),
-        JSON.stringify({ name: "tw-animate-css", main: "./index.css" }),
+        JSON.stringify({
+          name: "tw-animate-css",
+          exports: {
+            ".": {
+              style: "./dist/tw-animate.css",
+            },
+          },
+          main: "./dist/tw-animate.css",
+        }),
       );
-      await createFile(path.join(packageRoot, "index.css"), ".animate-in { opacity: 1; }\n");
+      await createFile(
+        path.join(packageRoot, "dist", "tw-animate.css"),
+        ".animate-in { opacity: 1; }\n",
+      );
 
       const result = await loadDesignSystem(cssEntry);
 
-      expect(result.dependencyPaths.has(path.join(packageRoot, "index.css"))).toBe(true);
+      expect(result.dependencyPaths.has(path.join(packageRoot, "dist", "tw-animate.css"))).toBe(
+        true,
+      );
     });
   });
 });
