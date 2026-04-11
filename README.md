@@ -11,17 +11,17 @@ Anyone can contribute to it, fork it, or build their own variant on top of it.
 Once published, developers should be able to run the package directly with `npx`:
 
 ```bash
-npx -y @mrfrog/twlint@latest . --verbose
+npx -y twlinter@latest . --verbose
 ```
 
 The CLI also supports the explicit `lint` command:
 
 ```bash
-npx -y @mrfrog/twlint@latest lint .
-npx -y @mrfrog/twlint@latest lint "src/**/*.{tsx,html}" --verbose
+npx -y twlinter@latest lint .
+npx -y twlinter@latest lint "src/**/*.{tsx,html}" --verbose
 ```
 
-The npm package is `@mrfrog/twlint`, and the installed CLI command remains `twlint`.
+The npm package is `twlinter`, and the installed CLI command remains `twlint`.
 
 ## Local Development
 
@@ -90,7 +90,7 @@ twlint lint apps/web
 ## Programmatic API
 
 ```ts
-import { lintProject } from "@mrfrog/twlint";
+import { lintProject } from "twlinter";
 
 const result = await lintProject(["."]);
 
