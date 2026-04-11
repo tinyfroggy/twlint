@@ -39,15 +39,15 @@ async function runLint(patterns: string[], opts: { verbose?: boolean }): Promise
 const program = new Command();
 
 program
-  .name("twlint")
+  .name("twlinter")
   .description(
     [
       "Print Tailwind canonical class suggestions in the terminal.",
       "",
       "Examples:",
-      "  twlint lint .",
-      "  twlint lint apps/web",
-      '  twlint lint "src/**/*.{tsx,html}"',
+      "  twlinter lint .",
+      "  twlinter lint apps/web",
+      '  twlinter lint "src/**/*.{tsx,html}"',
     ].join("\n"),
   )
   .version("0.1.2", "-v, --version", "display the version number")
