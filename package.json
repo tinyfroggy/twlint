@@ -1,10 +1,10 @@
 {
   "name": "twlinter",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {
-    "twlint": "./dist/cli.js"
+    "twlint": "dist/cli.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
