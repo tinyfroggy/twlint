@@ -1,6 +1,9 @@
 name: Publish
 
 on:
+  push:
+    branches:
+      - main
   release:
     types:
       - published
@@ -26,13 +29,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check if version changed
+        id: check
+        run: |
+          PUBLISHED=$(npm view ${{ github.event.repository.name }} version 2>/dev/null || echo "none")
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$PUBLISHED" != "$CURRENT" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Version $CURRENT (published: $PUBLISHED) — will publish"
+          else
+            echo "Version $CURRENT unchanged — skipping publish"
+          fi
+
       - name: Run checks
+        if: steps.check.outputs.changed == 'true'
         run: npm run check
 
       - name: Build package
+        if: steps.check.outputs.changed == 'true'
         run: npm run build
 
       - name: Publish to npm
+        if: steps.check.outputs.changed == 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
