@@ -56,6 +56,7 @@ Alias behavior: `twlinter` can be run with or without the `lint` subcommand.
 | Option      | Default | Description                            |
 | ----------- | ------- | -------------------------------------- |
 | `--verbose` | Off     | Show per-file details and project info |
+| `-c, --config <path>` | Auto    | Path to config file (default: `.twlinter.json` in project root) |
 
 ## CSS Entrypoint Discovery
 
@@ -124,15 +125,77 @@ console.log(
 
 ### `LintOptions`
 
-| Field     | Type      | Default | Description           |
-| --------- | --------- | ------- | --------------------- |
-| `verbose` | `boolean` | `false` | Show per-file details |
+| Field                | Type       | Default | Description                                         |
+| -------------------- | ---------- | ------- | --------------------------------------------------- |
+| `verbose`            | `boolean`  | `false` | Show per-file details                               |
+| `config`             | `string`   | —       | Path to config file                                 |
+| `ignorePatterns`     | `string[]` | —       | Additional glob patterns to skip (merged with defaults) |
+| `classIgnorePatterns` | `string[]` | —       | Regex patterns for class names to suppress          |
+| `maxFileSize`        | `number`   | 524288  | Maximum file size in bytes to scan                  |
+| `rules`              | `string[]` | —       | Rules to enable (default: `["canonical-classes"]`)  |
+| `cssEntry`           | `string`   | Auto    | Override the CSS entry point detection              |
 
 ## Rules
 
-| Rule                | Default | Description                                                  |
-| ------------------- | ------- | ------------------------------------------------------------ |
-| `canonical-classes` | On      | Suggests canonical Tailwind class names for arbitrary values |
+| Rule                        | Default | Description                                                  |
+| --------------------------- | ------- | ------------------------------------------------------------ |
+| `canonical-classes`         | On      | Suggests canonical Tailwind class names for arbitrary values |
+| `class-conflicts`           | Off     | Detect CSS class conflicts on the same element              |
+| `recommended-variant-order` | Off     | Check variant ordering follows Tailwind conventions          |
+| `used-blocklisted-class`    | Off     | Detect usage of blocklisted or legacy classes                |
+
+Specify rules in `.twlinter.json` or programmatically via `LintOptions.rules`.
+
+## Configuration
+
+Create a `.twlinter.json` file in your project root:
+
+```json
+{
+  "ignorePatterns": ["**/*.stories.*", "**/test/**"],
+  "classIgnorePatterns": ["w-\\[\\d+px\\]", "h-\\[\\d+px\\]"],
+  "rules": ["canonical-classes", "class-conflicts"],
+  "maxFileSize": 100000,
+  "cssEntry": "src/custom.css"
+}
+```
+
+| Field                | Type       | Description                                            |
+| -------------------- | ---------- | ------------------------------------------------------ |
+| `ignorePatterns`     | `string[]` | Glob patterns to skip (merged with built-in defaults) |
+| `classIgnorePatterns` | `string[]` | Regex patterns matched against each diagnostic's class name |
+| `rules`              | `string[]` | Rules to enable                                       |
+| `maxFileSize`        | `number`   | Maximum file size in bytes                            |
+| `cssEntry`           | `string`   | Override auto-discovered CSS entry point              |
+
+Config can also be placed in `package.json` under the `"twlinter"` key.
+
+### Ignoring files
+
+`ignorePatterns` are glob patterns merged into the built-in ignores (`node_modules/`, `dist/`, `build/`, etc.):
+
+```json
+{
+  "ignorePatterns": ["**/*.stories.*", "**/generated/**", "**/test/**"]
+}
+```
+
+### Ignoring specific class patterns
+
+`classIgnorePatterns` are **regex patterns** tested against each diagnostic's class name. Diagnostics whose class matches any pattern are silently dropped:
+
+```json
+{
+  "classIgnorePatterns": [
+    "w-\\[\\d+px\\]",
+    "h-\\[\\d+px\\]",
+    "min-h-\\[\\d+px\\]",
+    "max-w-\\[\\d+(?:px|rem)\\]"
+  ]
+}
+```
+
+This suppresses all suggestions for `w-[100px]`, `h-[350px]`, `sm:w-[260px]`, `max-w-[12rem]`, etc. The patterns support variants — `sm:w-[260px]` matches `w-\[\d+px\]` because the class name contains the token.
 
 ## Why We Use These Dependencies
 
@@ -164,8 +227,12 @@ src/
   types.ts            Shared types
   constants.ts        Default globs and patterns
   formatter.ts        Line-level diagnostic formatting
+  config/
+    types.ts          Config type definitions
+    load-config.ts    Config file loader (.twlinter.json / package.json)
   core/
     lint-project.ts   Scan orchestration
+    validation-worker.ts  Worker thread for parallel validation
     normalize-diagnostic.ts
     rules.ts          Rule registry
   discovery/

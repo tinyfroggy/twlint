@@ -5,14 +5,17 @@ import fg from "fast-glob";
 
 import { DEFAULT_GLOB, DEFAULT_IGNORE_PATTERNS, DEFAULT_PATTERNS } from "../constants.js";
 
-export async function resolveProjectInputFiles(patterns: string[]): Promise<string[]> {
+export async function resolveProjectInputFiles(
+  patterns: string[],
+  extraIgnore?: string[],
+): Promise<string[]> {
   const normalized = await normalizePatterns(patterns);
 
   return fg(normalized, {
     absolute: true,
     dot: false,
     onlyFiles: true,
-    ignore: DEFAULT_IGNORE_PATTERNS,
+    ignore: [...DEFAULT_IGNORE_PATTERNS, ...(extraIgnore ?? [])],
   });
 }
 

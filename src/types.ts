@@ -10,6 +10,13 @@ export type Diagnostic = {
 
 export type LintOptions = {
   verbose?: boolean;
+  config?: string;
+  ignorePatterns?: string[];
+  classIgnorePatterns?: string[];
+  includePatterns?: string[];
+  maxFileSize?: number;
+  rules?: string[];
+  cssEntry?: string;
 };
 
 export type LintResult = {
