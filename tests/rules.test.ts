@@ -21,8 +21,9 @@ describe("resolveRules", () => {
         "class-conflicts",
         "recommended-variant-order",
         "used-blocklisted-class",
+        "shorthand-classes",
       ]),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
   });
 });
 

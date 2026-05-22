@@ -2,7 +2,8 @@ export type RuleId =
   | "canonical-classes"
   | "class-conflicts"
   | "recommended-variant-order"
-  | "used-blocklisted-class";
+  | "used-blocklisted-class"
+  | "shorthand-classes";
 
 export const DEFAULT_RULES: RuleId[] = ["canonical-classes"];
 
@@ -16,6 +17,7 @@ export function resolveRules(requested?: string[]): RuleId[] {
     "class-conflicts",
     "recommended-variant-order",
     "used-blocklisted-class",
+    "shorthand-classes",
   ]);
   return requested.filter((r) => known.has(r)) as RuleId[];
 }

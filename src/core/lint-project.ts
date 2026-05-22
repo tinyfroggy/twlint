@@ -58,11 +58,12 @@ export async function lintProject(
 
 async function safeValidate(
   state: Awaited<ReturnType<typeof createValidationState>>["state"],
+  designSystem: unknown,
   candidate: CandidateInput,
   rules?: RuleId[],
 ) {
   try {
-    return await validateCandidate(state, candidate, rules);
+    return await validateCandidate(state, designSystem, candidate, rules);
   } catch {
     process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
     return [];
@@ -104,8 +105,8 @@ async function validateCandidates(
   );
 
   if (numWorkers <= 1) {
-    const { state } = await createValidationState(cssEntry);
-    return (await Promise.all(candidates.map((c) => safeValidate(state, c, rules)))).flat();
+    const { state, designSystem } = await createValidationState(cssEntry);
+    return (await Promise.all(candidates.map((c) => safeValidate(state, designSystem, c, rules)))).flat();
   }
 
   const chunks = distributeArray(candidates, numWorkers);

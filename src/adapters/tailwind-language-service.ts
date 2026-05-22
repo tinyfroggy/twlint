@@ -6,6 +6,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { loadDesignSystem } from "./tailwind-design-system.js";
 import { normalizeDiagnostic } from "../core/normalize-diagnostic.js";
+import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
 import { resolveRules, DEFAULT_RULES, type RuleId } from "../core/rules.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
@@ -43,11 +44,13 @@ export async function createValidationState(cssEntry: string) {
   return {
     dependencyPaths,
     state,
+    designSystem,
   };
 }
 
 export async function validateCandidate(
   state: ReturnType<typeof createState>,
+  designSystem: unknown,
   candidate: CandidateInput,
   rules: RuleId[] = DEFAULT_RULES,
 ): Promise<Diagnostic[]> {
@@ -58,12 +61,22 @@ export async function validateCandidate(
     candidate.text,
   );
   const resolved = resolveRules(rules);
-  const kinds = resolved.map((rule) => RULE_TO_DIAGNOSTIC_KIND[rule]) as unknown[] as Parameters<
-    typeof doValidate
-  >[2];
-  const diagnostics = (await doValidate(state, document, kinds)) as TailwindDiagnostic[];
+  const diagnostics: Diagnostic[] = [];
 
-  return diagnostics.map((raw) => normalizeDiagnostic(raw, candidate.file));
+  const lsRules = resolved.filter((r) => r !== "shorthand-classes");
+  if (lsRules.length > 0) {
+    const kinds = lsRules.map((rule) => RULE_TO_DIAGNOSTIC_KIND[rule]) as unknown[] as Parameters<
+      typeof doValidate
+    >[2];
+    const lsDiagnostics = (await doValidate(state, document, kinds)) as TailwindDiagnostic[];
+    diagnostics.push(...lsDiagnostics.map((raw) => normalizeDiagnostic(raw, candidate.file)));
+  }
+
+  if (resolved.includes("shorthand-classes")) {
+    diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
+  }
+
+  return diagnostics;
 }
 
 function detectLanguageId(file: string): string {

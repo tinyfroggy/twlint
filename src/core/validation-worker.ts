@@ -8,13 +8,13 @@ import type { RuleId } from "./rules.js";
 const { cssEntry, rules } = workerData as { cssEntry: string; rules: RuleId[] };
 
 try {
-  const { state } = await createValidationState(cssEntry);
+  const { state, designSystem } = await createValidationState(cssEntry);
 
   parentPort!.on("message", async (candidates: Array<{ file: string; text: string }>) => {
     const results = await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          return await validateCandidate(state, candidate, rules);
+          return await validateCandidate(state, designSystem, candidate, rules);
         } catch {
           process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
           return [] as Diagnostic[];

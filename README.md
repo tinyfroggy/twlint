@@ -26,20 +26,62 @@ The npm package and installed CLI command are both `twlinter`.
 ## Local Development
 
 ```bash
+git clone <repo-url>
+cd twlint
 npm install
-npm run dev -- --help
-npm run dev -- .
-npm run build
-npm run test
-npm run check
 ```
 
-To try the built CLI locally:
+### Running on a test project
+
+Use the built-in fixture to verify the CLI works:
+
+```bash
+# List all rules
+npm run dev -- --help
+
+# Scan the test fixture
+npm run dev -- tests/fixtures/tw-v4-app/src
+
+# Or scan the whole repo (excluding node_modules)
+npm run dev -- .
+
+# Enable extra rules
+npm run dev -- . --rules canonical-classes,shorthand-classes
+```
+
+### Running against your own project
+
+```bash
+# Point to your project directory
+npm run dev -- /path/to/your/project
+
+# With verbose output and custom rules
+npm run dev -- /path/to/your/project --verbose --rules canonical-classes,shorthand-classes
+
+# Override CSS entry point if auto-detection fails
+npm run dev -- /path/to/your/project --css-entry /path/to/your/project/src/globals.css
+```
+
+### Building and running the compiled CLI
 
 ```bash
 npm run build
-node dist/cli.js . --verbose
+node dist/cli.js tests/fixtures/tw-v4-app/src --verbose
 ```
+
+### Development scripts
+
+| Command               | Description                            |
+| --------------------- | -------------------------------------- |
+| `npm run dev -- ...`  | Run the CLI directly via `tsx` (no build needed) |
+| `npm run build`       | Compile TypeScript to `dist/`          |
+| `npm run test`        | Run all tests (Vitest)                 |
+| `npm run test:watch`  | Run tests in watch mode                |
+| `npm run typecheck`   | TypeScript type checking (`tsc --noEmit`) |
+| `npm run lint`        | Lint source code (oxlint)             |
+| `npm run format`      | Format source code (oxfmt)            |
+| `npm run format:check`| Check formatting without writing       |
+| `npm run check`       | Run all checks: typecheck + lint + format + test |
 
 ## Commands
 
