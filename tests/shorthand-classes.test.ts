@@ -29,6 +29,37 @@ describe("getShorthandClassDiagnostics", () => {
     expect(diags[0].severity).toBe("warning");
   });
 
+  it("reports reorder-only canonicalization", () => {
+    mockDesignSystem.canonicalizeCandidates.mockImplementation((candidates: string[]) => {
+      if (candidates.includes("pl-11")) {
+        return [
+          "pl-11",
+          "font-bold",
+          "border-border",
+          "bg-background",
+          "text-foreground",
+          "transition-all",
+          "shadow-sm",
+          "placeholder:text-muted-foreground/50",
+          "focus:border-border",
+          "focus:ring-0",
+        ];
+      }
+      return candidates;
+    });
+
+    const doc = TextDocument.create(
+      "file:///test.tsx",
+      "typescriptreact",
+      1,
+      '<input className="font-bold pl-11 bg-background border-border text-foreground transition-all shadow-sm placeholder:text-muted-foreground/50 focus:ring-0 focus:border-border" />',
+    );
+    const diags = getShorthandClassDiagnostics(mockDesignSystem, doc, "/test.tsx");
+
+    expect(diags).toHaveLength(1);
+    expect(diags[0].message).toContain("Reorder to:");
+  });
+
   it("detects px-4 py-4 -> p-4", () => {
     mockDesignSystem.canonicalizeCandidates.mockImplementation((candidates: string[]) => {
       if (candidates.length === 2 && candidates[0] === "px-4" && candidates[1] === "py-4") {

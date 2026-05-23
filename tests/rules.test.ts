@@ -43,7 +43,6 @@ describe("resolveRules", () => {
         "prefer-theme-scale",
         "no-magic-spacing",
         "detect-conflicts-in-template-literals",
-        "suggest-reusable-patterns",
         "prefer-design-tokens",
       ]),
     ).toHaveLength(25);
@@ -65,10 +64,12 @@ describe("resolveRules", () => {
 });
 
 describe("DEFAULT_RULES", () => {
-  it("uses a conservative correctness-focused default profile", () => {
+  it("runs every known rule by default", () => {
+    expect(DEFAULT_RULES).toHaveLength(25);
+    expect(DEFAULT_RULES).toContain("canonical-classes");
     expect(DEFAULT_RULES).toContain("class-conflicts");
-    expect(DEFAULT_RULES).toContain("require-flex-for-flex-utilities");
-    expect(DEFAULT_RULES).not.toContain("canonical-classes");
-    expect(DEFAULT_RULES).not.toContain("warn-incomplete-dark-color-pair");
+    expect(DEFAULT_RULES).toContain("shorthand-classes");
+    expect(DEFAULT_RULES).toContain("warn-incomplete-dark-color-pair");
+    expect(DEFAULT_RULES).toContain("prefer-design-tokens");
   });
 });
