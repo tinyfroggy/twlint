@@ -5,13 +5,15 @@ import { createValidationState, validateCandidate } from "../adapters/tailwind-l
 import type { Diagnostic } from "../types.js";
 import type { RuleId } from "./rules.js";
 import type { RuleContext } from "../custom-rules/index.js";
+import type { ComponentInfo } from "../config/types.js";
 
-const { cssEntry, rules, strict } = workerData as {
+const { cssEntry, rules, strict, components } = workerData as {
   cssEntry: string;
   rules: RuleId[];
   strict: boolean;
+  components?: Record<string, ComponentInfo>;
 };
-const ruleContext: RuleContext = { strict };
+const ruleContext: RuleContext = { strict, components };
 
 try {
   const { state, designSystem } = await createValidationState(cssEntry);

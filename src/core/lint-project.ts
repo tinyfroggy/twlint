@@ -44,7 +44,13 @@ export async function lintProject(
     : await resolveCssEntry(rootDir);
   const project = await discoverProject(cssEntry, rootDir);
   const candidates = await collectCandidateInputs(entries, maxFileSize);
-  let diagnostics = await validateCandidates(cssEntry, candidates, rules, options.strict);
+  let diagnostics = await validateCandidates(
+    cssEntry,
+    candidates,
+    rules,
+    options.strict,
+    options.components,
+  );
 
   if (classIgnorePatterns.length > 0) {
     diagnostics = filterIgnoredClasses(diagnostics, classIgnorePatterns);
@@ -69,8 +75,9 @@ async function safeValidate(
   candidate: CandidateInput,
   rules?: RuleId[],
   strict?: boolean,
+  components?: LintOptions["components"],
 ) {
-  return await validateCandidate(state, designSystem, candidate, rules, { strict });
+  return await validateCandidate(state, designSystem, candidate, rules, { strict, components });
 }
 
 async function collectCandidateInputs(
@@ -101,6 +108,7 @@ async function validateCandidates(
   candidates: CandidateInput[],
   rules?: RuleId[],
   strict?: boolean,
+  components?: LintOptions["components"],
 ): Promise<Diagnostic[]> {
   const numWorkers = Math.min(
     os.availableParallelism?.() ?? os.cpus().length,
@@ -111,7 +119,9 @@ async function validateCandidates(
   if (numWorkers <= 1) {
     const { state, designSystem } = await createValidationState(cssEntry);
     return (
-      await Promise.all(candidates.map((c) => safeValidate(state, designSystem, c, rules, strict)))
+      await Promise.all(
+        candidates.map((c) => safeValidate(state, designSystem, c, rules, strict, components)),
+      )
     ).flat();
   }
 
@@ -120,7 +130,12 @@ async function validateCandidates(
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
-        workerData: { cssEntry, rules: rules ?? DEFAULT_RULES, strict: strict ?? false },
+        workerData: {
+          cssEntry,
+          rules: rules ?? DEFAULT_RULES,
+          strict: strict ?? false,
+          components,
+        },
       });
 
       const result = await new Promise<Diagnostic[]>((resolve) => {

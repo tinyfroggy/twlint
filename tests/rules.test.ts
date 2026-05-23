@@ -65,7 +65,10 @@ describe("resolveRules", () => {
 });
 
 describe("DEFAULT_RULES", () => {
-  it("includes canonical-classes by default", () => {
-    expect(DEFAULT_RULES).toContain("canonical-classes");
+  it("uses a conservative correctness-focused default profile", () => {
+    expect(DEFAULT_RULES).toContain("class-conflicts");
+    expect(DEFAULT_RULES).toContain("require-flex-for-flex-utilities");
+    expect(DEFAULT_RULES).not.toContain("canonical-classes");
+    expect(DEFAULT_RULES).not.toContain("warn-incomplete-dark-color-pair");
   });
 });

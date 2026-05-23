@@ -62,4 +62,42 @@ describe("resolveProjectInputFiles", () => {
       expect(files.some((f) => f.endsWith("app.tsx"))).toBe(true);
     });
   });
+
+  it("hard-filters dependency and build directories", async () => {
+    await withTempDir(async (dir) => {
+      await createFile(dir, "src/app.tsx", "");
+      await createFile(dir, "node_modules/pkg/index.tsx", "");
+      await createFile(dir, ".next/server/app.tsx", "");
+      const files = await resolveProjectInputFiles([dir]);
+      expect(files.some((f) => f.endsWith("src/app.tsx"))).toBe(true);
+      expect(files.some((f) => f.includes("node_modules"))).toBe(false);
+      expect(files.some((f) => f.includes(".next"))).toBe(false);
+    });
+  });
+
+  it("ignores generated output from popular React frameworks", async () => {
+    await withTempDir(async (dir) => {
+      await createFile(dir, "app/routes/index.tsx", "");
+      await createFile(dir, ".tanstack/start/server/index.tsx", "");
+      await createFile(dir, ".vinxi/build/client/index.tsx", "");
+      await createFile(dir, ".output/public/index.html", "");
+      await createFile(dir, ".vercel/output/static/index.html", "");
+      await createFile(dir, ".netlify/edge-functions/index.tsx", "");
+      await createFile(dir, "public/build/manifest.tsx", "");
+      await createFile(dir, "storybook-static/index.html", "");
+
+      const files = await resolveProjectInputFiles([dir]);
+
+      expect(files.some((f) => f.endsWith("app/routes/index.tsx"))).toBe(true);
+      expect(files.some((f) => f.includes(".tanstack"))).toBe(false);
+      expect(files.some((f) => f.includes(".vinxi"))).toBe(false);
+      expect(files.some((f) => f.includes(".output"))).toBe(false);
+      expect(files.some((f) => f.includes(".vercel"))).toBe(false);
+      expect(files.some((f) => f.includes(".netlify"))).toBe(false);
+      expect(files.some((f) => f.includes(`${path.sep}public${path.sep}build${path.sep}`))).toBe(
+        false,
+      );
+      expect(files.some((f) => f.includes("storybook-static"))).toBe(false);
+    });
+  });
 });

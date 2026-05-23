@@ -10,14 +10,12 @@ import {
   INLINE_TAGS,
 } from "./utils.js";
 import {
-  getComponentInfo,
-  isComponentElement,
-  getStrictMode,
-} from "../component-registry.js";
-
-export type RuleContext = {
-  strict?: boolean;
-};
+  hasBaseInScope,
+  normalizeRuleContext,
+  resolveElementClasses,
+  type RuleContext,
+} from "./context.js";
+export type { RuleContext } from "./context.js";
 
 export type RuleCheck = (text: string, filePath: string, context?: RuleContext) => Diagnostic[];
 
@@ -347,12 +345,13 @@ const FLEX_GRID_CHILD_CLASSES = [
 
 function hasFlexOrGrid(bases: Set<string>): boolean {
   return (
-    bases.has("flex") ||
-    bases.has("grid") ||
-    bases.has("inline-flex") ||
-    bases.has("inline-grid")
+    bases.has("flex") || bases.has("grid") || bases.has("inline-flex") || bases.has("inline-grid")
   );
 }
+
+const FLEX_DISPLAY_BASES = new Set(["flex", "inline-flex"]);
+const GRID_DISPLAY_BASES = new Set(["grid", "inline-grid"]);
+const FLEX_OR_GRID_DISPLAY_BASES = new Set(["flex", "inline-flex", "grid", "inline-grid"]);
 
 function checkNoOrphanLayoutUtilities(
   text: string,
@@ -360,87 +359,50 @@ function checkNoOrphanLayoutUtilities(
   context?: RuleContext,
 ): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const strict = context?.strict ?? getStrictMode();
+  const ruleContext = normalizeRuleContext(context);
+  const strict = ruleContext.strict ?? false;
 
   for (const el of extractElementsWithClasses(text)) {
-    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
-
-    const mergedBases = (() => {
-      if (!el.isComponent) return userBases;
-      const info = getComponentInfo(el.tag);
-      if (!info) return userBases;
-      const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
-      return new Set(allClasses.map((c) => stripVariants(c)));
-    })();
-
-    if (hasFlexOrGrid(mergedBases)) continue;
-
-    for (const prefix of FLEX_GRID_CHILD_CLASSES) {
-      for (const b of userBases) {
-        if (b.startsWith(prefix)) {
-          if (el.isComponent && !getComponentInfo(el.tag)) {
-            if (strict) {
-              results.push(
-                diag(
-                  filePath,
-                  text,
-                  el.offset,
-                  `Low confidence: \`${b}\` requires \`flex\` or \`grid\` parent context unless \`${el.tag}\` provides it internally.`,
-                  "no-orphan-layout-utilities",
-                ),
-              );
-            }
-          } else {
-            const suffix =
-              el.isComponent
-                ? ` Component \`${el.tag}\` does not provide them internally.`
-                : "";
-            results.push(
-              diag(
-                filePath,
-                text,
-                el.offset,
-                `\`${b}\` requires \`flex\` or \`grid\` parent context but neither is present.${suffix}`,
-                "no-orphan-layout-utilities",
-              ),
-            );
-          }
-          break;
-        }
+    const resolved = resolveElementClasses(el, ruleContext);
+    const culprits = resolved.userClasses.filter(
+      (className) =>
+        FLEX_GRID_CHILD_CLASSES.some((prefix) => className.base.startsWith(prefix)) ||
+        className.base.startsWith("gap-"),
+    );
+    for (const culprit of culprits) {
+      if (
+        hasBaseInScope(resolved.effectiveClasses, culprit.responsive, FLEX_OR_GRID_DISPLAY_BASES)
+      ) {
+        continue;
       }
-    }
 
-    if (!mergedBases.has("flex") && !mergedBases.has("inline-flex")) {
-      const hasGap = userBases.has("gap-") || [...userBases].some((b) => b.startsWith("gap-"));
-      if (hasGap) {
-        if (el.isComponent && !getComponentInfo(el.tag)) {
-          if (strict) {
-            results.push(
-              diag(
-                filePath,
-                text,
-                el.offset,
-                `Low confidence: \`gap-*\` requires \`flex\` or \`grid\` parent context unless \`${el.tag}\` provides it internally.`,
-                "no-orphan-layout-utilities",
-              ),
-            );
-          }
-        } else {
-          const suffix =
-            el.isComponent
-              ? ` Component \`${el.tag}\` does not provide them internally.`
-              : "";
-          results.push(
-            diag(
-              filePath,
-              text,
-              el.offset,
-              `\`gap-*\` requires \`flex\` or \`grid\` parent context but neither is present.${suffix}`,
-              "no-orphan-layout-utilities",
-            ),
-          );
-        }
+      if (resolved.kind === "unknown-component") {
+        if (!strict) continue;
+        results.push(
+          diag(
+            filePath,
+            text,
+            resolved.offset,
+            `Low confidence: \`${culprit.base}\` requires \`flex\` or \`grid\` context unless \`${resolved.tag}\` provides it internally.`,
+            "no-orphan-layout-utilities",
+          ),
+        );
+        continue;
       }
+
+      const suffix =
+        resolved.kind === "known-component"
+          ? ` Component \`${resolved.tag}\` does not provide them internally.`
+          : "";
+      results.push(
+        diag(
+          filePath,
+          text,
+          resolved.offset,
+          `\`${culprit.base}\` requires \`flex\` or \`grid\` context but neither is present.${suffix}`,
+          "no-orphan-layout-utilities",
+        ),
+      );
     }
   }
 
@@ -502,53 +464,43 @@ function checkRequireFlexForFlexUtilities(
   context?: RuleContext,
 ): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const strict = context?.strict ?? getStrictMode();
+  const ruleContext = normalizeRuleContext(context);
+  const strict = ruleContext.strict ?? false;
 
   for (const el of extractElementsWithClasses(text)) {
-    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
+    const resolved = resolveElementClasses(el, ruleContext);
+    const culprits = resolved.userClasses.filter((className) =>
+      FLEX_CONTAINER_CLASSES.includes(className.base),
+    );
+    for (const culprit of culprits) {
+      if (hasBaseInScope(resolved.effectiveClasses, culprit.responsive, FLEX_DISPLAY_BASES))
+        continue;
 
-    if (userBases.has("flex") || userBases.has("inline-flex")) continue;
-
-    const hasFlexDir = FLEX_CONTAINER_CLASSES.some((fc) => userBases.has(fc));
-    if (!hasFlexDir) continue;
-
-    if (el.isComponent) {
-      const info = getComponentInfo(el.tag);
-      if (info) {
-        const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
-        const allBases = new Set(allClasses.map((c) => stripVariants(c)));
-        if (allBases.has("flex") || allBases.has("inline-flex")) continue;
-        const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
+      if (resolved.kind === "unknown-component") {
+        if (!strict) continue;
         results.push(
           diag(
             filePath,
             text,
-            el.offset,
-            `\`${fc}\` requires \`flex\` or \`inline-flex\` to have an effect. Component \`${el.tag}\` does not provide it internally.`,
+            resolved.offset,
+            `Low confidence: \`${culprit.base}\` requires \`flex\` or \`inline-flex\` unless \`${resolved.tag}\` provides it internally.`,
             "require-flex-for-flex-utilities",
           ),
         );
-      } else if (strict) {
-        const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
-        results.push(
-          diag(
-            filePath,
-            text,
-            el.offset,
-            `Low confidence: \`${fc}\` requires \`flex\` or \`inline-flex\` unless \`${el.tag}\` provides it internally.`,
-            "require-flex-for-flex-utilities",
-          ),
-        );
+        continue;
       }
-    } else {
-      const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
+
+      const suffix =
+        resolved.kind === "known-component"
+          ? ` Component \`${resolved.tag}\` does not provide it internally.`
+          : "";
       results.push(
         diag(
           filePath,
-            text,
-            el.offset,
-            `\`${fc}\` requires \`flex\` or \`inline-flex\` to have an effect.`,
-            "require-flex-for-flex-utilities",
+          text,
+          resolved.offset,
+          `\`${culprit.base}\` requires \`flex\` or \`inline-flex\` to have an effect.${suffix}`,
+          "require-flex-for-flex-utilities",
         ),
       );
     }
@@ -597,60 +549,42 @@ function checkRequireGridForGridUtilities(
   context?: RuleContext,
 ): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const strict = context?.strict ?? getStrictMode();
+  const ruleContext = normalizeRuleContext(context);
+  const strict = ruleContext.strict ?? false;
 
   for (const el of extractElementsWithClasses(text)) {
-    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
-
-    if (userBases.has("grid") || userBases.has("inline-grid")) continue;
-
-    const hasGridUtil = GRID_CONTAINER_CLASSES.some((prefix) =>
-      [...userBases].some((b) => b.startsWith(prefix)),
+    const resolved = resolveElementClasses(el, ruleContext);
+    const culprits = resolved.userClasses.filter((className) =>
+      GRID_CONTAINER_CLASSES.some((prefix) => className.base.startsWith(prefix)),
     );
-    if (!hasGridUtil) continue;
+    for (const culprit of culprits) {
+      if (hasBaseInScope(resolved.effectiveClasses, culprit.responsive, GRID_DISPLAY_BASES))
+        continue;
 
-    if (el.isComponent) {
-      const info = getComponentInfo(el.tag);
-      if (info) {
-        const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
-        const allBases = new Set(allClasses.map((c) => stripVariants(c)));
-        if (allBases.has("grid") || allBases.has("inline-grid")) continue;
-        const culprit = [...userBases].find((b) =>
-          GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
-        )!;
+      if (resolved.kind === "unknown-component") {
+        if (!strict) continue;
         results.push(
           diag(
             filePath,
             text,
-            el.offset,
-            `\`${culprit}\` requires \`grid\` or \`inline-grid\` to have an effect. Component \`${el.tag}\` does not provide it internally.`,
+            resolved.offset,
+            `Low confidence: \`${culprit.base}\` requires \`grid\` or \`inline-grid\` unless \`${resolved.tag}\` provides it internally.`,
             "require-grid-for-grid-utilities",
           ),
         );
-      } else if (strict) {
-        const culprit = [...userBases].find((b) =>
-          GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
-        )!;
-        results.push(
-          diag(
-            filePath,
-            text,
-            el.offset,
-            `Low confidence: \`${culprit}\` requires \`grid\` or \`inline-grid\` unless \`${el.tag}\` provides it internally.`,
-            "require-grid-for-grid-utilities",
-          ),
-        );
+        continue;
       }
-    } else {
-      const culprit = [...userBases].find((b) =>
-        GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
-      )!;
+
+      const suffix =
+        resolved.kind === "known-component"
+          ? ` Component \`${resolved.tag}\` does not provide it internally.`
+          : "";
       results.push(
         diag(
           filePath,
           text,
-          el.offset,
-          `\`${culprit}\` requires \`grid\` or \`inline-grid\` to have an effect.`,
+          resolved.offset,
+          `\`${culprit.base}\` requires \`grid\` or \`inline-grid\` to have an effect.${suffix}`,
           "require-grid-for-grid-utilities",
         ),
       );
@@ -1136,11 +1070,12 @@ export function runCustomRules(
   context?: RuleContext,
 ): Diagnostic[] {
   const results: Diagnostic[] = [];
+  const ruleContext = normalizeRuleContext(context);
   for (const id of ruleIds) {
     const check = getRuleCheck(id);
     if (check) {
       try {
-        results.push(...check(text, filePath, context));
+        results.push(...check(text, filePath, ruleContext));
       } catch {
         // skip failing rules
       }

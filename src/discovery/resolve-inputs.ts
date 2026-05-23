@@ -3,7 +3,12 @@ import path from "node:path";
 
 import fg from "fast-glob";
 
-import { DEFAULT_GLOB, DEFAULT_IGNORE_PATTERNS, DEFAULT_PATTERNS } from "../constants.js";
+import {
+  DEFAULT_GLOB,
+  DEFAULT_IGNORED_PATH_SEGMENTS,
+  DEFAULT_IGNORE_PATTERNS,
+  DEFAULT_PATTERNS,
+} from "../constants.js";
 
 export async function resolveProjectInputFiles(
   patterns: string[],
@@ -11,12 +16,20 @@ export async function resolveProjectInputFiles(
 ): Promise<string[]> {
   const normalized = await normalizePatterns(patterns);
 
-  return fg(normalized, {
+  const files = await fg(normalized, {
     absolute: true,
     dot: false,
     onlyFiles: true,
     ignore: [...DEFAULT_IGNORE_PATTERNS, ...(extraIgnore ?? [])],
   });
+
+  return files.filter((file) => !hasIgnoredPathSegment(file));
+}
+
+const IGNORED_PATH_SEGMENTS = new Set(DEFAULT_IGNORED_PATH_SEGMENTS);
+
+function hasIgnoredPathSegment(filePath: string): boolean {
+  return filePath.split(path.sep).some((segment) => IGNORED_PATH_SEGMENTS.has(segment));
 }
 
 export function resolveProjectRoot(patterns: string[]): string {

@@ -52,8 +52,7 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full",
   },
   "Avatar.Fallback": {
-    baseClasses:
-      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+    baseClasses: "flex h-full w-full items-center justify-center rounded-full bg-muted",
   },
   "Avatar.Image": {
     baseClasses: "aspect-square h-full w-full",
@@ -75,7 +74,8 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "transition-colors hover:text-foreground",
   },
   "Breadcrumb.List": {
-    baseClasses: "flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5",
+    baseClasses:
+      "flex flex-wrap items-center gap-1.5 break-words text-sm text-muted-foreground sm:gap-2.5",
   },
   "Breadcrumb.Page": {
     baseClasses: "font-normal text-foreground",
@@ -118,12 +118,10 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "min-w-0 shrink-0 grow-0 basis-full",
   },
   "Carousel.Next": {
-    baseClasses:
-      "absolute h-8 w-8 rounded-full",
+    baseClasses: "absolute h-8 w-8 rounded-full",
   },
   "Carousel.Previous": {
-    baseClasses:
-      "absolute h-8 w-8 rounded-full",
+    baseClasses: "absolute h-8 w-8 rounded-full",
   },
   Checkbox: {
     baseClasses:
@@ -149,8 +147,7 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "py-6 text-center text-sm",
   },
   "Command.Group": {
-    baseClasses:
-      "overflow-hidden p-1 text-foreground",
+    baseClasses: "overflow-hidden p-1 text-foreground",
   },
   "Command.Input": {
     baseClasses:
@@ -471,8 +468,7 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "",
   },
   "Pagination.Link": {
-    baseClasses:
-      "",
+    baseClasses: "",
   },
   "Pagination.Next": {
     baseClasses: "",
@@ -517,15 +513,13 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "relative overflow-hidden",
   },
   "ScrollArea.Bar": {
-    baseClasses:
-      "flex touch-none select-none transition-colors",
+    baseClasses: "flex touch-none select-none transition-colors",
   },
   "ScrollArea.Corner": {
     baseClasses: "bg-border",
   },
   "ScrollArea.Thumb": {
-    baseClasses:
-      "relative flex-1 rounded-full bg-border",
+    baseClasses: "relative flex-1 rounded-full bg-border",
   },
   Select: {
     baseClasses: "",
@@ -590,7 +584,8 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "flex flex-col gap-1.5 text-center sm:text-left",
   },
   "Sheet.Overlay": {
-    baseClasses: "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+    baseClasses:
+      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
   },
   "Sheet.Title": {
     baseClasses: "text-lg font-semibold leading-none tracking-tight",
@@ -644,8 +639,7 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
     baseClasses: "",
   },
   "Table.Row": {
-    baseClasses:
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+    baseClasses: "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
   },
   Tabs: {
     baseClasses: "",
@@ -671,10 +665,12 @@ export const shadcnPreset: Record<string, ComponentInfo> = {
       "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-muted hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground",
   },
   "Toggle.Group": {
-    baseClasses: "inline-flex items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+    baseClasses:
+      "inline-flex items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
   },
   ToggleGroup: {
-    baseClasses: "inline-flex items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+    baseClasses:
+      "inline-flex items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
   },
   Toolbar: {
     baseClasses: "",

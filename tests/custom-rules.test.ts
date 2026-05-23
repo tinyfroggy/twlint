@@ -81,6 +81,13 @@ describe("utils", () => {
       expect(result[1].tag).toBe("DialogFooter");
       expect(result[1].classes).toEqual(["flex-row", "gap-2"]);
     });
+
+    it("extracts JSX member expression tags", () => {
+      const result = extractElementsWithClasses('<Dialog.Footer className="flex-row" />');
+      expect(result).toHaveLength(1);
+      expect(result[0].tag).toBe("Dialog.Footer");
+      expect(result[0].isComponent).toBe(true);
+    });
   });
 
   describe("component-registry", () => {
@@ -119,7 +126,16 @@ describe("utils", () => {
     it("parses variant", () => {
       const p = parseClassName("hover:bg-red-500");
       expect(p.variant).toBe("hover");
+      expect(p.variants).toEqual(["hover"]);
       expect(p.base).toBe("bg-red-500");
+    });
+
+    it("tracks responsive scope separately from state variants", () => {
+      const p = parseClassName("sm:hover:flex-row");
+      expect(p.variant).toBe("sm:hover");
+      expect(p.variants).toEqual(["sm", "hover"]);
+      expect(p.responsive).toBe("sm");
+      expect(p.base).toBe("flex-row");
     });
 
     it("parses chained variants", () => {
@@ -458,6 +474,55 @@ describe("custom rules", () => {
       expect(diags).toHaveLength(0);
     });
 
+    it("passes on known JSX member component that provides flex internally", () => {
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<Dialog.Footer className="flex-row gap-2" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("uses explicit context components without global registry state", () => {
+      initRegistry({}, false);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<CustomFooter className="flex-row" />',
+        "/test.tsx",
+        { components: { CustomFooter: { baseClasses: "flex flex-col-reverse" } } },
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("allows base flex to satisfy responsive flex direction", () => {
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<div className="flex sm:flex-row" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns when flex only exists in a later responsive scope", () => {
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<div className="sm:flex sm:flex-row flex-col" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("flex-col");
+    });
+
+    it("requires component base flex in the same responsive scope", () => {
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<ResponsiveOnly className="flex-col" />',
+        "/test.tsx",
+        { components: { ResponsiveOnly: { baseClasses: "sm:flex" } } },
+      );
+      expect(diags).toHaveLength(1);
+    });
+
     it("warns on known component that does not provide flex", () => {
       initRegistry({ StaticBox: { baseClasses: "border p-4" } }, false);
       const diags = runCustomRules(
@@ -528,6 +593,25 @@ describe("custom rules", () => {
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
+    });
+
+    it("allows base grid to satisfy responsive grid utilities", () => {
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<div className="grid sm:grid-cols-3" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns when grid only exists in a later responsive scope", () => {
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<div className="sm:grid grid-cols-3" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("grid-cols-3");
     });
 
     it("warns on known component that does not provide grid", () => {

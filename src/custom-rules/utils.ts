@@ -7,10 +7,65 @@ export type ExtractedClassList = {
 export type ParsedClass = {
   original: string;
   variant: string;
+  variants: string[];
+  responsive: string;
   important: boolean;
   negative: boolean;
   base: string;
 };
+
+const RESPONSIVE_VARIANT_SET = new Set([
+  "sm",
+  "md",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "max-sm",
+  "max-md",
+  "max-lg",
+  "max-xl",
+  "max-2xl",
+  "max-3xl",
+  "max-4xl",
+  "max-5xl",
+  "max-6xl",
+  "max-7xl",
+]);
+
+function splitVariantParts(name: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let bracketDepth = 0;
+
+  for (const ch of name) {
+    if (ch === "[") bracketDepth++;
+    if (ch === "]" && bracketDepth > 0) bracketDepth--;
+
+    if (ch === ":" && bracketDepth === 0) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+
+    current += ch;
+  }
+
+  parts.push(current);
+  return parts;
+}
+
+function responsiveVariant(variants: string[]): string {
+  return (
+    variants.find(
+      (v) => RESPONSIVE_VARIANT_SET.has(v) || v.startsWith("min-[") || v.startsWith("max-["),
+    ) ?? ""
+  );
+}
 
 const CLASS_PATTERNS = [
   /(?:className|class)\s*=\s*"([^"]*)"/g,
@@ -44,44 +99,23 @@ export function parseClassName(name: string): ParsedClass {
   const important = remaining.startsWith("!");
   if (important) remaining = remaining.slice(1);
 
-  let variant = "";
-  const allParts: string[] = [];
-
-  if (remaining.startsWith("[")) {
-    const close = remaining.indexOf("]:");
-    if (close !== -1) {
-      const v = remaining.slice(0, close + 1);
-      const rest = remaining.slice(close + 2);
-      if (rest && rest.includes(":")) {
-        allParts.push(v);
-        remaining = rest;
-      } else {
-        variant = v;
-        remaining = rest;
-      }
-    }
-  }
-
-  if (!variant) {
-    const colonIdx = remaining.indexOf(":");
-    if (colonIdx !== -1) {
-      const before = remaining.slice(0, colonIdx);
-      const after = remaining.slice(colonIdx + 1);
-      if (after.includes(":")) {
-        const parts = remaining.split(":");
-        variant = parts.slice(0, -1).join(":");
-        remaining = parts[parts.length - 1];
-      } else {
-        variant = before;
-        remaining = after;
-      }
-    }
-  }
+  const parts = splitVariantParts(remaining);
+  const variants = parts.length > 1 ? parts.slice(0, -1) : [];
+  const variant = variants.join(":");
+  remaining = parts[parts.length - 1];
 
   const negative = remaining.startsWith("-");
   if (negative) remaining = remaining.slice(1);
 
-  return { original: name, variant, important, negative, base: remaining };
+  return {
+    original: name,
+    variant,
+    variants,
+    responsive: responsiveVariant(variants),
+    important,
+    negative,
+    base: remaining,
+  };
 }
 
 export function stripVariants(name: string): string {
@@ -123,7 +157,7 @@ export type ExtractedElement = {
 
 export function extractElements(text: string): ExtractedElement[] {
   const results: ExtractedElement[] = [];
-  const re = /<(\w+)((?:\s+[^>]*?)?)(\s*\/?\s*)>/g;
+  const re = /<([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)((?:\s+[^>]*?)?)(\s*\/?\s*)>/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     const tag = match[1];
@@ -189,10 +223,10 @@ export type ElementClassList = {
 };
 
 const ELEMENT_CLASS_PATTERNS = [
-  /<(\w+)[^>]*?(?:className|class)\s*=\s*"([^"]*)"/g,
-  /<(\w+)[^>]*?(?:className|class)\s*=\s*'([^']*)'/g,
-  /<(\w+)[^>]*?(?:className|class)\s*=\s*\{'([^']*)'\}/g,
-  /<(\w+)[^>]*?(?:className|class)\s*=\s*\{"([^"]*)"\}/g,
+  /<([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)[^>]*?(?:className|class)\s*=\s*"([^"]*)"/g,
+  /<([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)[^>]*?(?:className|class)\s*=\s*'([^']*)'/g,
+  /<([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)[^>]*?(?:className|class)\s*=\s*\{'([^']*)'\}/g,
+  /<([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)[^>]*?(?:className|class)\s*=\s*\{"([^"]*)"\}/g,
 ];
 
 export function extractElementsWithClasses(text: string): ElementClassList[] {
@@ -215,7 +249,7 @@ export function extractElementsWithClasses(text: string): ElementClassList[] {
         offset: match.index,
         classes,
         raw: trimmed,
-        isComponent: /^[A-Z]/.test(tag),
+        isComponent: /^[A-Z]/.test(tag) || tag.includes("."),
       });
     }
   }
