@@ -4,8 +4,14 @@ import { createValidationState, validateCandidate } from "../adapters/tailwind-l
 
 import type { Diagnostic } from "../types.js";
 import type { RuleId } from "./rules.js";
+import type { RuleContext } from "../custom-rules/index.js";
 
-const { cssEntry, rules } = workerData as { cssEntry: string; rules: RuleId[] };
+const { cssEntry, rules, strict } = workerData as {
+  cssEntry: string;
+  rules: RuleId[];
+  strict: boolean;
+};
+const ruleContext: RuleContext = { strict };
 
 try {
   const { state, designSystem } = await createValidationState(cssEntry);
@@ -14,7 +20,7 @@ try {
     const results = await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          return await validateCandidate(state, designSystem, candidate, rules);
+          return await validateCandidate(state, designSystem, candidate, rules, ruleContext);
         } catch {
           process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
           return [] as Diagnostic[];

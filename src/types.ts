@@ -8,6 +8,8 @@ export type Diagnostic = {
   source: string;
 };
 
+import type { ComponentInfo } from "./config/types.js";
+
 export type LintOptions = {
   verbose?: boolean;
   config?: string;
@@ -17,6 +19,8 @@ export type LintOptions = {
   maxFileSize?: number;
   rules?: string[];
   cssEntry?: string;
+  components?: Record<string, ComponentInfo>;
+  strict?: boolean;
 };
 
 export type LintResult = {

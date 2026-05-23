@@ -1,12 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { runCustomRules } from "../src/custom-rules/index.js";
+import { initRegistry, getComponentInfo, isComponentElement } from "../src/component-registry.js";
 import {
   extractClassLists,
+  extractElementsWithClasses,
   parseClassName,
   stripVariants,
   extractElements,
   INLINE_TAGS,
 } from "../src/custom-rules/utils.js";
+
+beforeEach(() => {
+  initRegistry({}, false);
+});
 
 describe("utils", () => {
   describe("extractClassLists", () => {
@@ -46,6 +52,59 @@ describe("utils", () => {
         <span class="m-2" />
       `);
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe("extractElementsWithClasses", () => {
+    it("extracts tag and classes from native element", () => {
+      const result = extractElementsWithClasses('<div className="p-4 m-2" />');
+      expect(result).toHaveLength(1);
+      expect(result[0].tag).toBe("div");
+      expect(result[0].classes).toEqual(["p-4", "m-2"]);
+      expect(result[0].isComponent).toBe(false);
+    });
+
+    it("detects component elements by capitalized tag", () => {
+      const result = extractElementsWithClasses('<DialogFooter className="flex-row" />');
+      expect(result).toHaveLength(1);
+      expect(result[0].tag).toBe("DialogFooter");
+      expect(result[0].isComponent).toBe(true);
+    });
+
+    it("handles multiple class patterns", () => {
+      const result = extractElementsWithClasses(`
+        <div className="p-4" />
+        <DialogFooter className="flex-row gap-2" />
+      `);
+      expect(result).toHaveLength(2);
+      expect(result[0].tag).toBe("div");
+      expect(result[1].tag).toBe("DialogFooter");
+      expect(result[1].classes).toEqual(["flex-row", "gap-2"]);
+    });
+  });
+
+  describe("component-registry", () => {
+    it("initRegistry sets component info", () => {
+      initRegistry({ DialogFooter: { baseClasses: "flex flex-col" } }, false);
+      expect(getComponentInfo("DialogFooter")?.baseClasses).toBe("flex flex-col");
+    });
+
+    it("isComponentElement detects components by uppercase", () => {
+      expect(isComponentElement("div")).toBe(false);
+      expect(isComponentElement("span")).toBe(false);
+      expect(isComponentElement("DialogFooter")).toBe(true);
+      expect(isComponentElement("Button")).toBe(true);
+    });
+
+    it("returns undefined for unknown component", () => {
+      initRegistry({}, false);
+      expect(getComponentInfo("Unknown")).toBeUndefined();
+    });
+
+    it("merges user components over presets", () => {
+      initRegistry({ Button: { baseClasses: "custom-flex" } }, false);
+      // shadcn preset already has Button, user override wins
+      expect(getComponentInfo("Button")?.baseClasses).toBe("custom-flex");
     });
   });
 
@@ -326,6 +385,48 @@ describe("custom rules", () => {
       );
       expect(diags).toHaveLength(0);
     });
+
+    it("passes on known component that provides flex internally", () => {
+      initRegistry({ DialogFooter: { baseClasses: "flex gap-2" } }, false);
+      const diags = runCustomRules(
+        ["no-orphan-layout-utilities"],
+        '<DialogFooter className="items-center justify-center gap-4" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on known component that does not provide flex/grid", () => {
+      initRegistry({ StaticBox: { baseClasses: "border p-4" } }, false);
+      const diags = runCustomRules(
+        ["no-orphan-layout-utilities"],
+        '<StaticBox className="items-center" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("does not provide them internally");
+    });
+
+    it("skips unknown component without strict mode", () => {
+      initRegistry({}, false);
+      const diags = runCustomRules(
+        ["no-orphan-layout-utilities"],
+        '<Unknown className="items-center" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on unknown component with strict mode", () => {
+      initRegistry({}, true);
+      const diags = runCustomRules(
+        ["no-orphan-layout-utilities"],
+        '<Unknown className="items-center" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("Low confidence");
+    });
   });
 
   describe("require-flex-for-flex-utilities", () => {
@@ -342,6 +443,58 @@ describe("custom rules", () => {
       const diags = runCustomRules(
         ["require-flex-for-flex-utilities"],
         '<div className="flex flex-col" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("passes on known component that provides flex internally", () => {
+      initRegistry({ DialogFooter: { baseClasses: "flex flex-col-reverse" } }, false);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<DialogFooter className="flex-row gap-2" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on known component that does not provide flex", () => {
+      initRegistry({ StaticBox: { baseClasses: "border p-4" } }, false);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<StaticBox className="flex-row" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("does not provide it internally");
+    });
+
+    it("skips unknown component without strict mode", () => {
+      initRegistry({}, false);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<Unknown className="flex-row" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on unknown component with strict mode", () => {
+      initRegistry({}, true);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<Unknown className="flex-row" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("Low confidence");
+    });
+
+    it("passes on component with inline-flex in base", () => {
+      initRegistry({ Toolbar: { baseClasses: "inline-flex items-center" } }, false);
+      const diags = runCustomRules(
+        ["require-flex-for-flex-utilities"],
+        '<Toolbar className="flex-row" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
@@ -365,6 +518,48 @@ describe("custom rules", () => {
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
+    });
+
+    it("passes on known component that provides grid internally", () => {
+      initRegistry({ GridWrapper: { baseClasses: "grid grid-cols-12" } }, false);
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<GridWrapper className="col-span-6" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on known component that does not provide grid", () => {
+      initRegistry({ PlainBox: { baseClasses: "block p-4" } }, false);
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<PlainBox className="grid-cols-3" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("does not provide it internally");
+    });
+
+    it("skips unknown component without strict mode", () => {
+      initRegistry({}, false);
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<Unknown className="grid-cols-3" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("warns on unknown component with strict mode", () => {
+      initRegistry({}, true);
+      const diags = runCustomRules(
+        ["require-grid-for-grid-utilities"],
+        '<Unknown className="grid-cols-3" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("Low confidence");
     });
   });
 

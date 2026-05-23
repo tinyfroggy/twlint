@@ -9,6 +9,7 @@ import { normalizeDiagnostic } from "../core/normalize-diagnostic.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
 import { resolveRules, DEFAULT_RULES, type RuleId } from "../core/rules.js";
 import { ALL_RULES, runCustomRules } from "../custom-rules/index.js";
+import type { RuleContext } from "../custom-rules/index.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
 
@@ -63,6 +64,7 @@ export async function validateCandidate(
   designSystem: unknown,
   candidate: CandidateInput,
   rules: RuleId[] = DEFAULT_RULES,
+  ruleContext?: RuleContext,
 ): Promise<Diagnostic[]> {
   const document = TextDocument.create(
     pathToFileURL(candidate.file).href,
@@ -96,7 +98,7 @@ export async function validateCandidate(
 
   const customRuleIds = resolved.filter((r) => CUSTOM_RULE_SET.has(r));
   if (customRuleIds.length > 0) {
-    diagnostics.push(...runCustomRules(customRuleIds, candidate.text, candidate.file));
+    diagnostics.push(...runCustomRules(customRuleIds, candidate.text, candidate.file, ruleContext));
   }
 
   return diagnostics;

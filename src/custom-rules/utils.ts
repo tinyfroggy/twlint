@@ -180,6 +180,63 @@ export const INLINE_TAGS = new Set([
   "var",
 ]);
 
+export type ElementClassList = {
+  tag: string;
+  offset: number;
+  classes: string[];
+  raw: string;
+  isComponent: boolean;
+};
+
+const ELEMENT_CLASS_PATTERNS = [
+  /<(\w+)[^>]*?(?:className|class)\s*=\s*"([^"]*)"/g,
+  /<(\w+)[^>]*?(?:className|class)\s*=\s*'([^']*)'/g,
+  /<(\w+)[^>]*?(?:className|class)\s*=\s*\{'([^']*)'\}/g,
+  /<(\w+)[^>]*?(?:className|class)\s*=\s*\{"([^"]*)"\}/g,
+];
+
+export function extractElementsWithClasses(text: string): ElementClassList[] {
+  const results: ElementClassList[] = [];
+  const seen = new Set<number>();
+  for (const pattern of ELEMENT_CLASS_PATTERNS) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      if (seen.has(match.index)) continue;
+      seen.add(match.index);
+      const tag = match[1];
+      const classStr = match[2] ?? match[3] ?? match[4] ?? "";
+      if (!classStr) continue;
+      const trimmed = classStr.trim();
+      if (!trimmed) continue;
+      const classes = trimmed.split(/\s+/).filter(Boolean);
+      results.push({
+        tag,
+        offset: match.index,
+        classes,
+        raw: trimmed,
+        isComponent: /^[A-Z]/.test(tag),
+      });
+    }
+  }
+  return results;
+}
+
+export function extractApplyBlocks(text: string): ExtractedClassList[] {
+  const results: ExtractedClassList[] = [];
+  const re = /@apply\s+([^;]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const classStr = match[1];
+    if (!classStr) continue;
+    const trimmed = classStr.trim();
+    if (!trimmed) continue;
+    const classes = trimmed.split(/\s+/).filter(Boolean);
+    results.push({ offset: match.index, classes, raw: trimmed });
+  }
+  return results;
+}
+
 export const RESPONSIVE_VARIANTS = [
   "sm",
   "md",

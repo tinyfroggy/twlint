@@ -28,6 +28,8 @@ async function runLint(
     maxFileSize: config?.maxFileSize,
     rules,
     cssEntry: opts.cssEntry || config?.cssEntry,
+    components: config?.components,
+    strict: config?.strict,
   };
 
   const result = await lintProject(patterns, options);

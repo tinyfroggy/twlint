@@ -2,13 +2,24 @@ import { Diagnostic } from "../types.js";
 import path from "node:path";
 import {
   extractClassLists,
+  extractElementsWithClasses,
+  extractApplyBlocks,
   stripVariants,
   parseClassName,
   extractElements,
   INLINE_TAGS,
 } from "./utils.js";
+import {
+  getComponentInfo,
+  isComponentElement,
+  getStrictMode,
+} from "../component-registry.js";
 
-export type RuleCheck = (text: string, filePath: string) => Diagnostic[];
+export type RuleContext = {
+  strict?: boolean;
+};
+
+export type RuleCheck = (text: string, filePath: string, context?: RuleContext) => Diagnostic[];
 
 export type RuleEntry = {
   id: string;
@@ -334,16 +345,109 @@ const FLEX_GRID_CHILD_CLASSES = [
   "self-",
 ];
 
-function checkNoOrphanLayoutUtilities(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    const bases = new Set(classes.map((c) => stripVariants(c)));
-    const hasFlex = bases.has("flex");
-    const hasGrid = bases.has("grid");
-    const hasInlineFlex = bases.has("inline-flex");
-    const hasInlineGrid = bases.has("inline-grid");
+function hasFlexOrGrid(bases: Set<string>): boolean {
+  return (
+    bases.has("flex") ||
+    bases.has("grid") ||
+    bases.has("inline-flex") ||
+    bases.has("inline-grid")
+  );
+}
 
-    if (hasFlex || hasGrid || hasInlineFlex || hasInlineGrid) continue;
+function checkNoOrphanLayoutUtilities(
+  text: string,
+  filePath: string,
+  context?: RuleContext,
+): Diagnostic[] {
+  const results: Diagnostic[] = [];
+  const strict = context?.strict ?? getStrictMode();
+
+  for (const el of extractElementsWithClasses(text)) {
+    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
+
+    const mergedBases = (() => {
+      if (!el.isComponent) return userBases;
+      const info = getComponentInfo(el.tag);
+      if (!info) return userBases;
+      const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
+      return new Set(allClasses.map((c) => stripVariants(c)));
+    })();
+
+    if (hasFlexOrGrid(mergedBases)) continue;
+
+    for (const prefix of FLEX_GRID_CHILD_CLASSES) {
+      for (const b of userBases) {
+        if (b.startsWith(prefix)) {
+          if (el.isComponent && !getComponentInfo(el.tag)) {
+            if (strict) {
+              results.push(
+                diag(
+                  filePath,
+                  text,
+                  el.offset,
+                  `Low confidence: \`${b}\` requires \`flex\` or \`grid\` parent context unless \`${el.tag}\` provides it internally.`,
+                  "no-orphan-layout-utilities",
+                ),
+              );
+            }
+          } else {
+            const suffix =
+              el.isComponent
+                ? ` Component \`${el.tag}\` does not provide them internally.`
+                : "";
+            results.push(
+              diag(
+                filePath,
+                text,
+                el.offset,
+                `\`${b}\` requires \`flex\` or \`grid\` parent context but neither is present.${suffix}`,
+                "no-orphan-layout-utilities",
+              ),
+            );
+          }
+          break;
+        }
+      }
+    }
+
+    if (!mergedBases.has("flex") && !mergedBases.has("inline-flex")) {
+      const hasGap = userBases.has("gap-") || [...userBases].some((b) => b.startsWith("gap-"));
+      if (hasGap) {
+        if (el.isComponent && !getComponentInfo(el.tag)) {
+          if (strict) {
+            results.push(
+              diag(
+                filePath,
+                text,
+                el.offset,
+                `Low confidence: \`gap-*\` requires \`flex\` or \`grid\` parent context unless \`${el.tag}\` provides it internally.`,
+                "no-orphan-layout-utilities",
+              ),
+            );
+          }
+        } else {
+          const suffix =
+            el.isComponent
+              ? ` Component \`${el.tag}\` does not provide them internally.`
+              : "";
+          results.push(
+            diag(
+              filePath,
+              text,
+              el.offset,
+              `\`gap-*\` requires \`flex\` or \`grid\` parent context but neither is present.${suffix}`,
+              "no-orphan-layout-utilities",
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  for (const { offset, classes } of extractApplyBlocks(text)) {
+    const bases = new Set(classes.map((c) => stripVariants(c)));
+
+    if (hasFlexOrGrid(bases)) continue;
 
     for (const prefix of FLEX_GRID_CHILD_CLASSES) {
       for (const b of bases) {
@@ -362,7 +466,7 @@ function checkNoOrphanLayoutUtilities(text: string, filePath: string): Diagnosti
       }
     }
 
-    if (!hasFlex && !hasInlineFlex) {
+    if (!bases.has("flex") && !bases.has("inline-flex")) {
       if (bases.has("gap-") || [...bases].some((b) => b.startsWith("gap-"))) {
         results.push(
           diag(
@@ -376,6 +480,7 @@ function checkNoOrphanLayoutUtilities(text: string, filePath: string): Diagnosti
       }
     }
   }
+
   return results;
 }
 
@@ -391,9 +496,65 @@ const FLEX_CONTAINER_CLASSES = [
   "flex-wrap-reverse",
 ];
 
-function checkRequireFlexForFlexUtilities(text: string, filePath: string): Diagnostic[] {
+function checkRequireFlexForFlexUtilities(
+  text: string,
+  filePath: string,
+  context?: RuleContext,
+): Diagnostic[] {
   const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
+  const strict = context?.strict ?? getStrictMode();
+
+  for (const el of extractElementsWithClasses(text)) {
+    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
+
+    if (userBases.has("flex") || userBases.has("inline-flex")) continue;
+
+    const hasFlexDir = FLEX_CONTAINER_CLASSES.some((fc) => userBases.has(fc));
+    if (!hasFlexDir) continue;
+
+    if (el.isComponent) {
+      const info = getComponentInfo(el.tag);
+      if (info) {
+        const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
+        const allBases = new Set(allClasses.map((c) => stripVariants(c)));
+        if (allBases.has("flex") || allBases.has("inline-flex")) continue;
+        const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
+        results.push(
+          diag(
+            filePath,
+            text,
+            el.offset,
+            `\`${fc}\` requires \`flex\` or \`inline-flex\` to have an effect. Component \`${el.tag}\` does not provide it internally.`,
+            "require-flex-for-flex-utilities",
+          ),
+        );
+      } else if (strict) {
+        const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
+        results.push(
+          diag(
+            filePath,
+            text,
+            el.offset,
+            `Low confidence: \`${fc}\` requires \`flex\` or \`inline-flex\` unless \`${el.tag}\` provides it internally.`,
+            "require-flex-for-flex-utilities",
+          ),
+        );
+      }
+    } else {
+      const fc = FLEX_CONTAINER_CLASSES.find((f) => userBases.has(f))!;
+      results.push(
+        diag(
+          filePath,
+            text,
+            el.offset,
+            `\`${fc}\` requires \`flex\` or \`inline-flex\` to have an effect.`,
+            "require-flex-for-flex-utilities",
+        ),
+      );
+    }
+  }
+
+  for (const { offset, classes } of extractApplyBlocks(text)) {
     const bases = new Set(classes.map((c) => stripVariants(c)));
     if (bases.has("flex") || bases.has("inline-flex")) continue;
     for (const fc of FLEX_CONTAINER_CLASSES) {
@@ -411,6 +572,7 @@ function checkRequireFlexForFlexUtilities(text: string, filePath: string): Diagn
       }
     }
   }
+
   return results;
 }
 
@@ -429,9 +591,73 @@ const GRID_CONTAINER_CLASSES = [
   "row-end-",
 ];
 
-function checkRequireGridForGridUtilities(text: string, filePath: string): Diagnostic[] {
+function checkRequireGridForGridUtilities(
+  text: string,
+  filePath: string,
+  context?: RuleContext,
+): Diagnostic[] {
   const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
+  const strict = context?.strict ?? getStrictMode();
+
+  for (const el of extractElementsWithClasses(text)) {
+    const userBases = new Set(el.classes.map((c) => stripVariants(c)));
+
+    if (userBases.has("grid") || userBases.has("inline-grid")) continue;
+
+    const hasGridUtil = GRID_CONTAINER_CLASSES.some((prefix) =>
+      [...userBases].some((b) => b.startsWith(prefix)),
+    );
+    if (!hasGridUtil) continue;
+
+    if (el.isComponent) {
+      const info = getComponentInfo(el.tag);
+      if (info) {
+        const allClasses = (info.baseClasses + " " + el.raw).split(/\s+/).filter(Boolean);
+        const allBases = new Set(allClasses.map((c) => stripVariants(c)));
+        if (allBases.has("grid") || allBases.has("inline-grid")) continue;
+        const culprit = [...userBases].find((b) =>
+          GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
+        )!;
+        results.push(
+          diag(
+            filePath,
+            text,
+            el.offset,
+            `\`${culprit}\` requires \`grid\` or \`inline-grid\` to have an effect. Component \`${el.tag}\` does not provide it internally.`,
+            "require-grid-for-grid-utilities",
+          ),
+        );
+      } else if (strict) {
+        const culprit = [...userBases].find((b) =>
+          GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
+        )!;
+        results.push(
+          diag(
+            filePath,
+            text,
+            el.offset,
+            `Low confidence: \`${culprit}\` requires \`grid\` or \`inline-grid\` unless \`${el.tag}\` provides it internally.`,
+            "require-grid-for-grid-utilities",
+          ),
+        );
+      }
+    } else {
+      const culprit = [...userBases].find((b) =>
+        GRID_CONTAINER_CLASSES.some((p) => b.startsWith(p)),
+      )!;
+      results.push(
+        diag(
+          filePath,
+          text,
+          el.offset,
+          `\`${culprit}\` requires \`grid\` or \`inline-grid\` to have an effect.`,
+          "require-grid-for-grid-utilities",
+        ),
+      );
+    }
+  }
+
+  for (const { offset, classes } of extractApplyBlocks(text)) {
     const bases = new Set(classes.map((c) => stripVariants(c)));
     if (bases.has("grid") || bases.has("inline-grid")) continue;
     for (const prefix of GRID_CONTAINER_CLASSES) {
@@ -451,6 +677,7 @@ function checkRequireGridForGridUtilities(text: string, filePath: string): Diagn
       }
     }
   }
+
   return results;
 }
 
@@ -902,13 +1129,18 @@ export function getRuleCheck(id: string): RuleCheck | undefined {
   return RULE_MAP.get(id);
 }
 
-export function runCustomRules(ruleIds: string[], text: string, filePath: string): Diagnostic[] {
+export function runCustomRules(
+  ruleIds: string[],
+  text: string,
+  filePath: string,
+  context?: RuleContext,
+): Diagnostic[] {
   const results: Diagnostic[] = [];
   for (const id of ruleIds) {
     const check = getRuleCheck(id);
     if (check) {
       try {
-        results.push(...check(text, filePath));
+        results.push(...check(text, filePath, context));
       } catch {
         // skip failing rules
       }

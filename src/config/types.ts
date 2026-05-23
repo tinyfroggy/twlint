@@ -1,3 +1,7 @@
+export type ComponentInfo = {
+  baseClasses: string;
+};
+
 export type TwlinterConfig = {
   include?: string[];
   ignorePatterns?: string[];
@@ -5,4 +9,6 @@ export type TwlinterConfig = {
   cssEntry?: string;
   maxFileSize?: number;
   rules?: string[];
+  strict?: boolean;
+  components?: Record<string, ComponentInfo>;
 };
