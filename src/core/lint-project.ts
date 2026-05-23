@@ -7,7 +7,7 @@ import { createValidationState, validateCandidate } from "../adapters/tailwind-l
 import { discoverProject } from "../discovery/discover-project.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
 import { resolveCssEntry } from "../discovery/resolve-css-entry.js";
-import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
+import { resolveProjectInputFiles, resolveProjectRoot } from "../discovery/resolve-inputs.js";
 import { DEFAULT_RULES, type RuleId } from "./rules.js";
 
 import type { CandidateInput, Diagnostic, LintOptions, LintResult } from "../types.js";
@@ -22,6 +22,7 @@ export async function lintProject(
   const classIgnorePatterns = options.classIgnorePatterns ?? [];
   const rules = options.rules as RuleId[] | undefined;
   const maxFileSize = options.maxFileSize ?? MAX_FILE_SIZE_BYTES;
+  const rootDir = resolveProjectRoot(patterns);
   const entries = await resolveProjectInputFiles(patterns, ignorePatterns);
 
   if (entries.length === 0) {
@@ -30,12 +31,12 @@ export async function lintProject(
       scannedFiles: 0,
       elapsedMilliseconds: performance.now() - startedAt,
       diagnostics: [],
-      project: await discoverProject(null),
+      project: await discoverProject(null, rootDir),
     };
   }
 
-  const cssEntry = options.cssEntry ?? (await resolveCssEntry());
-  const project = await discoverProject(cssEntry);
+  const cssEntry = options.cssEntry ?? (await resolveCssEntry(rootDir));
+  const project = await discoverProject(cssEntry, rootDir);
   const candidates = await collectCandidateInputs(entries, maxFileSize);
   let diagnostics = await validateCandidates(cssEntry, candidates, rules);
 
@@ -62,12 +63,7 @@ async function safeValidate(
   candidate: CandidateInput,
   rules?: RuleId[],
 ) {
-  try {
-    return await validateCandidate(state, designSystem, candidate, rules);
-  } catch {
-    process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
-    return [];
-  }
+  return await validateCandidate(state, designSystem, candidate, rules);
 }
 
 async function collectCandidateInputs(
@@ -106,7 +102,9 @@ async function validateCandidates(
 
   if (numWorkers <= 1) {
     const { state, designSystem } = await createValidationState(cssEntry);
-    return (await Promise.all(candidates.map((c) => safeValidate(state, designSystem, c, rules)))).flat();
+    return (
+      await Promise.all(candidates.map((c) => safeValidate(state, designSystem, c, rules)))
+    ).flat();
   }
 
   const chunks = distributeArray(candidates, numWorkers);

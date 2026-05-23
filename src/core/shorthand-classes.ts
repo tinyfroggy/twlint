@@ -55,13 +55,14 @@ export function getShorthandClassDiagnostics(
   }
 
   for (const { offset, classes } of classLists) {
-    const canonicalized = canonicalize(classes, {
+    const canonicalized = canonicalize.call(designSystem as Record<string, unknown>, classes, {
       collapse: true,
       logicalToPhysical: true,
     });
 
     if (!canonicalized || canonicalized.length === 0) continue;
-    if (canonicalized.length === classes.length && canonicalized.every((c, i) => c === classes[i])) continue;
+    if (canonicalized.length === classes.length && canonicalized.every((c, i) => c === classes[i]))
+      continue;
 
     const pos = document.positionAt(offset);
     diagnostics.push({

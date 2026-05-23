@@ -22,8 +22,44 @@ describe("resolveRules", () => {
         "recommended-variant-order",
         "used-blocklisted-class",
         "shorthand-classes",
+        "no-duplicate-utilities",
+        "canonical-class-order",
+        "prefer-truncate-shorthand",
+        "no-important-abuse",
+        "max-classname-length",
+        "no-sr-only-display-conflict",
+        "consistent-negative-arbitrary-values",
+        "prefer-logical-properties",
+        "require-motion-reduce-for-animation",
+        "no-orphan-layout-utilities",
+        "require-flex-for-flex-utilities",
+        "require-grid-for-grid-utilities",
+        "warn-ineffective-z-index",
+        "require-display-for-sizing",
+        "warn-hover-on-disabled",
+        "require-focus-visible-for-interactive",
+        "warn-incomplete-dark-color-pair",
+        "prefer-theme-scale",
+        "no-magic-spacing",
+        "detect-conflicts-in-template-literals",
+        "suggest-reusable-patterns",
+        "prefer-design-tokens",
       ]),
-    ).toHaveLength(5);
+    ).toHaveLength(27);
+  });
+
+  it("resolves prefer-shorthand alias to shorthand-classes", () => {
+    expect(resolveRules(["prefer-shorthand"])).toEqual(["shorthand-classes"]);
+  });
+
+  it("resolves no-conflicting-utilities alias to class-conflicts", () => {
+    expect(resolveRules(["no-conflicting-utilities"])).toEqual(["class-conflicts"]);
+  });
+
+  it("resolves aliases alongside known rules", () => {
+    expect(
+      resolveRules(["prefer-shorthand", "canonical-classes", "no-conflicting-utilities"]),
+    ).toEqual(["shorthand-classes", "canonical-classes", "class-conflicts"]);
   });
 });
 

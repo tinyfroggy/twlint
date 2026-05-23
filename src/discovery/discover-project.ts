@@ -47,8 +47,11 @@ function isTailwindV4(version: string): boolean {
   return version.startsWith("4");
 }
 
-export async function discoverProject(cssEntryPath: string | null): Promise<ProjectInfo> {
-  const rootDirectory = process.cwd();
+export async function discoverProject(
+  cssEntryPath: string | null,
+  rootDirectory?: string,
+): Promise<ProjectInfo> {
+  rootDirectory ??= process.cwd();
   const packageJson = await readPackageJson(rootDirectory);
   let tailwindVersion: string | null = null;
   let supported = false;

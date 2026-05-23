@@ -179,14 +179,39 @@ console.log(
 
 ## Rules
 
-| Rule                        | Default | Description                                                  |
-| --------------------------- | ------- | ------------------------------------------------------------ |
-| `canonical-classes`         | On      | Suggests canonical Tailwind class names for arbitrary values |
-| `class-conflicts`           | Off     | Detect CSS class conflicts on the same element              |
-| `recommended-variant-order` | Off     | Check variant ordering follows Tailwind conventions          |
-| `used-blocklisted-class`    | Off     | Detect usage of blocklisted or legacy classes                |
+| Rule                                    | Default | Description                                                          |
+| --------------------------------------- | ------- | -------------------------------------------------------------------- |
+| `canonical-classes`                     | On      | Suggests canonical Tailwind class names for arbitrary values         |
+| `class-conflicts` / `no-conflicting-utilities` | Off     | Detect CSS class conflicts on the same element                      |
+| `recommended-variant-order`             | Off     | Check variant ordering follows Tailwind conventions                  |
+| `used-blocklisted-class`                | Off     | Detect usage of blocklisted or legacy classes                        |
+| `shorthand-classes` / `prefer-shorthand` | Off     | Suggest shorthand classes (e.g. `w-10 h-10` → `size-10`)            |
+| `no-duplicate-utilities`                | Off     | Detect repeated identical utilities (e.g. `p-4 p-4`)                |
+| `canonical-class-order`                 | Off     | Enforce deterministic utility ordering (base → sm → md → lg → xl)   |
+| `prefer-truncate-shorthand`             | Off     | Suggest `truncate` over `overflow-hidden text-ellipsis whitespace-nowrap` |
+| `no-important-abuse`                    | Off     | Warn when `!important` is overused (>2 per class list)               |
+| `max-classname-length`                  | Off     | Warn on class lists exceeding 120 characters                         |
+| `no-sr-only-display-conflict`           | Off     | Detect `sr-only` combined with display utilities                     |
+| `consistent-negative-arbitrary-values`  | Off     | Enforce `-top-[5px]` over `top-[-5px]` syntax                       |
+| `prefer-logical-properties`             | Off     | Encourage `ps-*`/`pe-*` over `pl-*`/`pr-*` for RTL support          |
+| `require-motion-reduce-for-animation`   | Off     | Require `motion-reduce:animate-none` for animations                  |
+| `no-orphan-layout-utilities`            | Off     | Detect `items-center`/`justify-center` without `flex`/`grid`        |
+| `require-flex-for-flex-utilities`       | Off     | Detect `flex-col`/`flex-wrap` without `flex`                         |
+| `require-grid-for-grid-utilities`       | Off     | Detect `grid-cols-*`/`grid-rows-*` without `grid`                    |
+| `warn-ineffective-z-index`              | Off     | Detect `z-*` without `relative`/`absolute`/`fixed`/`sticky`          |
+| `require-display-for-sizing`            | Off     | Detect sizing on inline elements without `inline-block`              |
+| `warn-hover-on-disabled`                | Off     | Detect `hover:*` on disabled elements                                |
+| `require-focus-visible-for-interactive` | Off     | Require `focus-visible:*` on interactive elements with `hover:*`     |
+| `warn-incomplete-dark-color-pair`       | Off     | Detect light-mode colors without `dark:*` counterparts               |
+| `prefer-theme-scale`                    | Off     | Prefer Tailwind design scale over arbitrary values                   |
+| `no-magic-spacing`                      | Off     | Detect spacing values not aligned to the 4px design grid             |
+| `detect-conflicts-in-template-literals` | Off     | Detect duplicate utilities in template literal class names           |
+| `suggest-reusable-patterns`             | Off     | Suggest `@utility` extraction for repeated class patterns            |
+| `prefer-design-tokens`                  | Off     | Prefer design tokens over raw hex colors                             |
 
-Specify rules in `.twlinter.json` or programmatically via `LintOptions.rules`.
+Specify rules in `.twlinter.json` or programmatically via `LintOptions.rules`. Use comma-separated names with `--rules` on the CLI.
+
+**Aliases:** `prefer-shorthand` → `shorthand-classes`, `no-conflicting-utilities` → `class-conflicts`. Both names work interchangeably.
 
 ## Configuration
 
@@ -277,6 +302,10 @@ src/
     validation-worker.ts  Worker thread for parallel validation
     normalize-diagnostic.ts
     rules.ts          Rule registry
+    shorthand-classes.ts  Shorthand detection via canonicalizeCandidates
+  custom-rules/
+    index.ts          22 static-analysis rules from ruls.md
+    utils.ts          Shared class extraction, variant/element parsing
   discovery/
     discover-project.ts
     resolve-css-entry.ts

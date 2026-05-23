@@ -8,6 +8,7 @@ import { loadDesignSystem } from "./tailwind-design-system.js";
 import { normalizeDiagnostic } from "../core/normalize-diagnostic.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
 import { resolveRules, DEFAULT_RULES, type RuleId } from "../core/rules.js";
+import { ALL_RULES, runCustomRules } from "../custom-rules/index.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
 
@@ -24,6 +25,15 @@ const RULE_TO_DIAGNOSTIC_KIND: Record<string, string> = {
   "recommended-variant-order": "invalidApply",
   "used-blocklisted-class": "suggestCanonicalClasses",
 };
+
+const LS_RULES = new Set([
+  "canonical-classes",
+  "class-conflicts",
+  "recommended-variant-order",
+  "used-blocklisted-class",
+]);
+
+const CUSTOM_RULE_SET = new Set<string>(ALL_RULES.map((r) => r.id));
 
 export async function createValidationState(cssEntry: string) {
   const { dependencyPaths, designSystem } = await loadDesignSystem(cssEntry);
@@ -63,17 +73,30 @@ export async function validateCandidate(
   const resolved = resolveRules(rules);
   const diagnostics: Diagnostic[] = [];
 
-  const lsRules = resolved.filter((r) => r !== "shorthand-classes");
+  const lsRules = resolved.filter((r) => LS_RULES.has(r));
   if (lsRules.length > 0) {
-    const kinds = lsRules.map((rule) => RULE_TO_DIAGNOSTIC_KIND[rule]) as unknown[] as Parameters<
-      typeof doValidate
-    >[2];
-    const lsDiagnostics = (await doValidate(state, document, kinds)) as TailwindDiagnostic[];
-    diagnostics.push(...lsDiagnostics.map((raw) => normalizeDiagnostic(raw, candidate.file)));
+    try {
+      const kinds = lsRules.map((rule) => RULE_TO_DIAGNOSTIC_KIND[rule]) as unknown[] as Parameters<
+        typeof doValidate
+      >[2];
+      const lsDiagnostics = (await doValidate(state, document, kinds)) as TailwindDiagnostic[];
+      diagnostics.push(...lsDiagnostics.map((raw) => normalizeDiagnostic(raw, candidate.file)));
+    } catch {
+      // LS rules failed silently; shorthand-classes and custom rules still run
+    }
   }
 
   if (resolved.includes("shorthand-classes")) {
-    diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
+    try {
+      diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
+    } catch {
+      // shorthand-classes requires the design system; skip if unavailable
+    }
+  }
+
+  const customRuleIds = resolved.filter((r) => CUSTOM_RULE_SET.has(r));
+  if (customRuleIds.length > 0) {
+    diagnostics.push(...runCustomRules(customRuleIds, candidate.text, candidate.file));
   }
 
   return diagnostics;

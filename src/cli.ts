@@ -10,16 +10,23 @@ import type { LintOptions } from "./types.js";
 
 async function runLint(
   patterns: string[],
-  opts: { verbose?: boolean; config?: string },
+  opts: { verbose?: boolean; config?: string; rules?: string },
 ): Promise<void> {
   const config = await loadConfig(opts.config);
+
+  const rules = opts.rules
+    ? opts.rules
+        .split(",")
+        .map((r) => r.trim())
+        .filter(Boolean)
+    : config?.rules;
 
   const options: LintOptions = {
     verbose: opts.verbose ?? false,
     ignorePatterns: config?.ignorePatterns,
     classIgnorePatterns: config?.classIgnorePatterns,
     maxFileSize: config?.maxFileSize,
-    rules: config?.rules,
+    rules,
     cssEntry: config?.cssEntry,
   };
 
@@ -64,6 +71,7 @@ program
   .version("0.1.2", "-v, --version", "display the version number")
   .option("--verbose", "Show file details per rule and configuration info")
   .option("-c, --config <path>", "Path to config file")
+  .option("--rules <rules>", "Comma-separated rule names (overrides config)")
   .argument("[patterns...]", "Files or glob patterns to scan")
   .action((patterns: string[], opts) => runLint(patterns, opts));
 
@@ -73,6 +81,7 @@ program
   .description("Lint files for canonical Tailwind classes")
   .option("--verbose", "Show file details per rule and configuration info")
   .option("-c, --config <path>", "Path to config file")
+  .option("--rules <rules>", "Comma-separated rule names (overrides config)")
   .argument("[patterns...]", "Files or glob patterns to scan")
   .action((patterns: string[], opts) => runLint(patterns, opts));
 

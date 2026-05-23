@@ -15,12 +15,14 @@ const PREFERRED_CSS_ENTRY_NAMES = [
   "globals.css",
 ];
 
-export async function resolveCssEntry(): Promise<string> {
+export async function resolveCssEntry(rootDir?: string): Promise<string> {
+  const cwd = rootDir || process.cwd();
   const candidates = await fg(DEFAULT_CSS_ENTRY_PATTERNS, {
     absolute: true,
     dot: false,
     onlyFiles: true,
     ignore: DEFAULT_IGNORE_PATTERNS,
+    cwd,
   });
 
   const tailwindEntries: string[] = [];
@@ -53,7 +55,7 @@ export async function resolveCssEntry(): Promise<string> {
     )!;
   }
 
-  const relativePaths = tailwindEntries.map((e) => path.relative(process.cwd(), e));
+  const relativePaths = tailwindEntries.map((e) => path.relative(cwd, e));
   throw new Error(
     `Multiple Tailwind v4 CSS entry files found:\n${relativePaths.map((p) => `  ${p}`).join("\n")}\n\nCould not determine which one to use.`,
   );
