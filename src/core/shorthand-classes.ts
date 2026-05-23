@@ -71,7 +71,7 @@ export function getShorthandClassDiagnostics(
       column: pos.character + 1,
       severity: "warning",
       rule: "shorthand-classes",
-      message: `These classes can be replaced with: ${canonicalized.map((c) => `\`${c}\``).join(", ")}`,
+      message: `Replace \`${classes.join(" ")}\` with: ${canonicalized.map((c) => `\`${c}\``).join(", ")}`,
       source: "tw",
     });
   }

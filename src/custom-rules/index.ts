@@ -180,29 +180,6 @@ function checkNoImportantAbuse(text: string, filePath: string): Diagnostic[] {
   return results;
 }
 
-// ─── 5. max-classname-length ────────────────────────────────────────────────
-
-function checkMaxClassnameLength(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const MAX_LENGTH = 120;
-  for (const { offset, raw } of extractClassLists(text)) {
-    if (raw.length > MAX_LENGTH) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          offset,
-          `Class list is ${raw.length} characters long. Consider extracting a component or using \`@apply\` for readability.`,
-          "max-classname-length",
-        ),
-      );
-    }
-  }
-  return results;
-}
-
-// ─── 6. no-sr-only-display-conflict ─────────────────────────────────────────
-
 const DISPLAY_CLASSES = new Set([
   "block",
   "inline",
@@ -874,11 +851,6 @@ export const ALL_RULES: RuleEntry[] = [
     id: "no-important-abuse",
     check: checkNoImportantAbuse,
     description: "Warn when !important is overused",
-  },
-  {
-    id: "max-classname-length",
-    check: checkMaxClassnameLength,
-    description: "Warn on excessively long class lists",
   },
   {
     id: "no-sr-only-display-conflict",

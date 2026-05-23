@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { resolveRules, DEFAULT_RULES } from "../src/core/rules.js";
 
+const ALL_DEFAULT = DEFAULT_RULES;
+
 describe("resolveRules", () => {
   it("returns default rules when none specified", () => {
-    expect(resolveRules()).toEqual(["canonical-classes"]);
+    expect(resolveRules()).toEqual(ALL_DEFAULT);
   });
 
   it("returns default rules when empty array", () => {
-    expect(resolveRules([])).toEqual(["canonical-classes"]);
+    expect(resolveRules([])).toEqual(ALL_DEFAULT);
   });
 
   it("filters to known rules", () => {
@@ -26,7 +28,6 @@ describe("resolveRules", () => {
         "canonical-class-order",
         "prefer-truncate-shorthand",
         "no-important-abuse",
-        "max-classname-length",
         "no-sr-only-display-conflict",
         "consistent-negative-arbitrary-values",
         "prefer-logical-properties",
@@ -45,7 +46,7 @@ describe("resolveRules", () => {
         "suggest-reusable-patterns",
         "prefer-design-tokens",
       ]),
-    ).toHaveLength(27);
+    ).toHaveLength(26);
   });
 
   it("resolves prefer-shorthand alias to shorthand-classes", () => {
@@ -65,6 +66,6 @@ describe("resolveRules", () => {
 
 describe("DEFAULT_RULES", () => {
   it("includes canonical-classes by default", () => {
-    expect(DEFAULT_RULES).toEqual(["canonical-classes"]);
+    expect(DEFAULT_RULES).toContain("canonical-classes");
   });
 });

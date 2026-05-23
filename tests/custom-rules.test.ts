@@ -216,28 +216,6 @@ describe("custom rules", () => {
     });
   });
 
-  describe("max-classname-length", () => {
-    it("warns on long class list", () => {
-      const longClass =
-        "p-4 m-4 flex items-center justify-between rounded-xl border bg-white shadow-sm hover:bg-gray-50 dark:bg-black dark:hover:bg-gray-900 md:p-6 lg:p-8 xl:p-10 2xl:p-12";
-      const diags = runCustomRules(
-        ["max-classname-length"],
-        `<div className="${longClass}" />`,
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes on short class list", () => {
-      const diags = runCustomRules(
-        ["max-classname-length"],
-        '<div className="p-4 m-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
   describe("no-sr-only-display-conflict", () => {
     it("detects sr-only with block", () => {
       const diags = runCustomRules(

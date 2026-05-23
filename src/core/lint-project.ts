@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 import os from "node:os";
@@ -35,7 +36,9 @@ export async function lintProject(
     };
   }
 
-  const cssEntry = options.cssEntry ?? (await resolveCssEntry(rootDir));
+  const cssEntry = options.cssEntry
+    ? path.resolve(rootDir, options.cssEntry)
+    : await resolveCssEntry(rootDir);
   const project = await discoverProject(cssEntry, rootDir);
   const candidates = await collectCandidateInputs(entries, maxFileSize);
   let diagnostics = await validateCandidates(cssEntry, candidates, rules);
