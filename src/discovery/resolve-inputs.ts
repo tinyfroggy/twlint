@@ -3,7 +3,12 @@ import path from "node:path";
 
 import fg from "fast-glob";
 
-import { DEFAULT_GLOB, DEFAULT_IGNORE_PATTERNS, DEFAULT_PATTERNS } from "../constants.js";
+import {
+  DEFAULT_GLOB,
+  DEFAULT_IGNORED_PATH_SEGMENTS,
+  DEFAULT_IGNORE_PATTERNS,
+  DEFAULT_PATTERNS,
+} from "../constants.js";
 
 export async function resolveProjectInputFiles(
   patterns: string[],
@@ -11,13 +16,53 @@ export async function resolveProjectInputFiles(
 ): Promise<string[]> {
   const normalized = await normalizePatterns(patterns);
 
-  return fg(normalized, {
+  const files = await fg(normalized, {
     absolute: true,
     dot: false,
     onlyFiles: true,
     ignore: [...DEFAULT_IGNORE_PATTERNS, ...(extraIgnore ?? [])],
   });
+
+  return files.filter((file) => !hasIgnoredPathSegment(file));
 }
+
+const IGNORED_PATH_SEGMENTS = new Set(DEFAULT_IGNORED_PATH_SEGMENTS);
+
+function hasIgnoredPathSegment(filePath: string): boolean {
+  return filePath.split(path.sep).some((segment) => IGNORED_PATH_SEGMENTS.has(segment));
+}
+
+export function resolveProjectRoot(patterns: string[]): string {
+  for (const p of patterns) {
+    if (p === ".") return process.cwd();
+    try {
+      const resolved = path.resolve(p);
+      const fileInfo = statSync(resolved);
+      let dir: string;
+      if (fileInfo.isDirectory()) {
+        dir = resolved;
+      } else {
+        dir = path.dirname(resolved);
+      }
+      // walk up until we find a package.json
+      let current = dir;
+      while (current !== path.dirname(current)) {
+        try {
+          statSync(path.join(current, "package.json"));
+          return current;
+        } catch {
+          current = path.dirname(current);
+        }
+      }
+      return dir;
+    } catch {
+      // not a valid path, skip
+    }
+  }
+  return process.cwd();
+}
+
+import { statSync } from "node:fs";
 
 async function normalizePatterns(patterns: string[]): Promise<string[]> {
   if (patterns.length === 0) {

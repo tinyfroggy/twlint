@@ -59,25 +59,37 @@ type DiagnosticGroup = {
   rule: string;
   message: string;
   severity: string;
-  locations: { file: string; line: number }[];
+  details: string[];
+  locations: { file: string; line: number; detail?: string }[];
 };
+
+const MAX_DEFAULT_LOCATIONS = 8;
 
 function groupDiagnostics(diagnostics: Diagnostic[]): DiagnosticGroup[] {
   const map = new Map<string, DiagnosticGroup>();
 
   for (const d of diagnostics) {
-    const key = `${d.severity}\0${d.rule}\0${d.message}`;
+    const message = summarizeMessage(d);
+    const key = `${d.severity}\0${d.rule}\0${message}`;
     let group = map.get(key);
     if (!group) {
       group = {
         rule: d.rule,
-        message: d.message,
+        message,
         severity: d.severity,
+        details: [],
         locations: [],
       };
       map.set(key, group);
     }
-    group.locations.push({ file: d.file, line: d.line });
+    if (d.message !== message && !group.details.includes(d.message)) {
+      group.details.push(d.message);
+    }
+    group.locations.push({
+      file: d.file,
+      line: d.line,
+      detail: d.message !== message ? d.message : undefined,
+    });
   }
 
   return [...map.values()];
@@ -89,12 +101,42 @@ function renderGroup(group: DiagnosticGroup, verbose: boolean, lines: string[]):
   const count = group.locations.length;
   const countSuffix = count > 1 ? ` (${count})` : "";
 
-  lines.push(`  ${color}${icon} ${group.message}${countSuffix}${ANSI.reset}`);
+  lines.push(
+    `  ${color}${icon} ${group.message}${countSuffix}${ANSI.reset} ${ANSI.dim}${group.rule}${ANSI.reset}`,
+  );
 
-  for (const loc of group.locations) {
+  const shownLocations = verbose
+    ? group.locations
+    : group.locations.slice(0, MAX_DEFAULT_LOCATIONS);
+  for (const loc of shownLocations) {
     const display = verbose ? loc.file : relPath(loc.file);
     lines.push(`    ${ANSI.gray}${display}:${loc.line}${ANSI.reset}`);
+    if (verbose && loc.detail) {
+      lines.push(`      ${ANSI.dim}${loc.detail}${ANSI.reset}`);
+    }
   }
+
+  if (!verbose && group.locations.length > shownLocations.length) {
+    lines.push(
+      `    ${ANSI.gray}...and ${group.locations.length - shownLocations.length} more location(s). Use --verbose to show all.${ANSI.reset}`,
+    );
+  }
+
+  if (!verbose && group.details.length > 0) {
+    lines.push(`    ${ANSI.gray}Use --verbose to show the full suggestion text.${ANSI.reset}`);
+  }
+}
+
+function summarizeMessage(diagnostic: Diagnostic): string {
+  if (/^Reorder to:/i.test(diagnostic.message)) {
+    return "Class order does not match Tailwind's recommended order.";
+  }
+
+  if (diagnostic.message.length > 140) {
+    return `${diagnostic.message.slice(0, 137).trimEnd()}...`;
+  }
+
+  return diagnostic.message;
 }
 
 function relPath(filePath: string): string {

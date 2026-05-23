@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 import os from "node:os";
@@ -7,8 +8,9 @@ import { createValidationState, validateCandidate } from "../adapters/tailwind-l
 import { discoverProject } from "../discovery/discover-project.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
 import { resolveCssEntry } from "../discovery/resolve-css-entry.js";
-import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
+import { resolveProjectInputFiles, resolveProjectRoot } from "../discovery/resolve-inputs.js";
 import { DEFAULT_RULES, type RuleId } from "./rules.js";
+import { initRegistry } from "../component-registry.js";
 
 import type { CandidateInput, Diagnostic, LintOptions, LintResult } from "../types.js";
 import { MAX_FILE_SIZE_BYTES } from "../constants.js";
@@ -22,7 +24,10 @@ export async function lintProject(
   const classIgnorePatterns = options.classIgnorePatterns ?? [];
   const rules = options.rules as RuleId[] | undefined;
   const maxFileSize = options.maxFileSize ?? MAX_FILE_SIZE_BYTES;
+  const rootDir = resolveProjectRoot(patterns);
   const entries = await resolveProjectInputFiles(patterns, ignorePatterns);
+
+  initRegistry(options.components, options.strict);
 
   if (entries.length === 0) {
     return {
@@ -30,14 +35,22 @@ export async function lintProject(
       scannedFiles: 0,
       elapsedMilliseconds: performance.now() - startedAt,
       diagnostics: [],
-      project: await discoverProject(null),
+      project: await discoverProject(null, rootDir),
     };
   }
 
-  const cssEntry = options.cssEntry ?? (await resolveCssEntry());
-  const project = await discoverProject(cssEntry);
+  const cssEntry = options.cssEntry
+    ? path.resolve(rootDir, options.cssEntry)
+    : await resolveCssEntry(rootDir);
+  const project = await discoverProject(cssEntry, rootDir);
   const candidates = await collectCandidateInputs(entries, maxFileSize);
-  let diagnostics = await validateCandidates(cssEntry, candidates, rules);
+  let diagnostics = await validateCandidates(
+    cssEntry,
+    candidates,
+    rules,
+    options.strict,
+    options.components,
+  );
 
   if (classIgnorePatterns.length > 0) {
     diagnostics = filterIgnoredClasses(diagnostics, classIgnorePatterns);
@@ -58,15 +71,13 @@ export async function lintProject(
 
 async function safeValidate(
   state: Awaited<ReturnType<typeof createValidationState>>["state"],
+  designSystem: unknown,
   candidate: CandidateInput,
   rules?: RuleId[],
+  strict?: boolean,
+  components?: LintOptions["components"],
 ) {
-  try {
-    return await validateCandidate(state, candidate, rules);
-  } catch {
-    process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
-    return [];
-  }
+  return await validateCandidate(state, designSystem, candidate, rules, { strict, components });
 }
 
 async function collectCandidateInputs(
@@ -96,16 +107,22 @@ async function validateCandidates(
   cssEntry: string,
   candidates: CandidateInput[],
   rules?: RuleId[],
+  strict?: boolean,
+  components?: LintOptions["components"],
 ): Promise<Diagnostic[]> {
   const numWorkers = Math.min(
     os.availableParallelism?.() ?? os.cpus().length,
     4,
-    Math.max(1, candidates.length),
+    Math.min(4, candidates.length),
   );
 
   if (numWorkers <= 1) {
-    const { state } = await createValidationState(cssEntry);
-    return (await Promise.all(candidates.map((c) => safeValidate(state, c, rules)))).flat();
+    const { state, designSystem } = await createValidationState(cssEntry);
+    return (
+      await Promise.all(
+        candidates.map((c) => safeValidate(state, designSystem, c, rules, strict, components)),
+      )
+    ).flat();
   }
 
   const chunks = distributeArray(candidates, numWorkers);
@@ -113,7 +130,12 @@ async function validateCandidates(
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
-        workerData: { cssEntry, rules: rules ?? DEFAULT_RULES },
+        workerData: {
+          cssEntry,
+          rules: rules ?? DEFAULT_RULES,
+          strict: strict ?? false,
+          components,
+        },
       });
 
       const result = await new Promise<Diagnostic[]>((resolve) => {
