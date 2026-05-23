@@ -46,7 +46,7 @@ describe("resolveRules", () => {
         "suggest-reusable-patterns",
         "prefer-design-tokens",
       ]),
-    ).toHaveLength(26);
+    ).toHaveLength(25);
   });
 
   it("resolves prefer-shorthand alias to shorthand-classes", () => {

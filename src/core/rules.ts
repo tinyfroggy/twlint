@@ -23,7 +23,6 @@ export type RuleId =
   | "prefer-theme-scale"
   | "no-magic-spacing"
   | "detect-conflicts-in-template-literals"
-  | "suggest-reusable-patterns"
   | "prefer-design-tokens"
   | "prefer-shorthand"
   | "no-conflicting-utilities";
@@ -53,7 +52,6 @@ export const DEFAULT_RULES: RuleId[] = [
   "prefer-theme-scale",
   "no-magic-spacing",
   "detect-conflicts-in-template-literals",
-  "suggest-reusable-patterns",
   "prefer-design-tokens",
 ];
 
@@ -92,7 +90,6 @@ export function resolveRules(requested?: string[]): RuleId[] {
     "prefer-theme-scale",
     "no-magic-spacing",
     "detect-conflicts-in-template-literals",
-    "suggest-reusable-patterns",
     "prefer-design-tokens",
   ]);
 

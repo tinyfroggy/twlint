@@ -64,16 +64,38 @@ export function getShorthandClassDiagnostics(
     if (canonicalized.length === classes.length && canonicalized.every((c, i) => c === classes[i]))
       continue;
 
+    const origSet = new Set(classes);
+    const canonSet = new Set(canonicalized);
+
+    const removed = classes.filter((c) => !canonSet.has(c));
+    const added = canonicalized.filter((c) => !origSet.has(c));
+
     const pos = document.positionAt(offset);
-    diagnostics.push({
-      file: path.relative(process.cwd(), filePath),
-      line: pos.line + 1,
-      column: pos.character + 1,
-      severity: "warning",
-      rule: "shorthand-classes",
-      message: `Replace \`${classes.join(" ")}\` with: ${canonicalized.map((c) => `\`${c}\``).join(", ")}`,
-      source: "tw",
-    });
+
+    if (removed.length > 0) {
+      diagnostics.push({
+        file: path.relative(process.cwd(), filePath),
+        line: pos.line + 1,
+        column: pos.character + 1,
+        severity: "warning",
+        rule: "shorthand-classes",
+        message:
+          removed.length === 1 && added.length === 1
+            ? `Replace \`${removed[0]}\` with \`${added[0]}\``
+            : `Replace \`${removed.join(" ")}\` with ${added.map((c) => `\`${c}\``).join(", ")}`,
+        source: "tw",
+      });
+    } else if (canonicalized.length === classes.length) {
+      diagnostics.push({
+        file: path.relative(process.cwd(), filePath),
+        line: pos.line + 1,
+        column: pos.character + 1,
+        severity: "warning",
+        rule: "shorthand-classes",
+        message: `Reorder to: ${canonicalized.map((c) => `\`${c}\``).join(", ")}`,
+        source: "tw",
+      });
+    }
   }
 
   return diagnostics;

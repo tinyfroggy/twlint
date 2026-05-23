@@ -552,12 +552,4 @@ describe("custom rules", () => {
       expect(diags).toHaveLength(0);
     });
   });
-
-  describe("suggest-reusable-patterns", () => {
-    it("returns diagnostics after threshold", () => {
-      const code = '<div className="flex items-center justify-center" />\n'.repeat(4);
-      const diags = runCustomRules(["suggest-reusable-patterns"], code, "/test.tsx");
-      expect(diags.length).toBeGreaterThanOrEqual(1);
-    });
-  });
 });

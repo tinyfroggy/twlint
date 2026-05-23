@@ -766,48 +766,7 @@ function checkDetectConflictsInTemplateLiterals(text: string, filePath: string):
   return results;
 }
 
-// ─── 21. suggest-reusable-patterns ──────────────────────────────────────────
-
-const COMMON_PATTERNS = [
-  { pattern: ["flex", "items-center", "justify-center"], suggestion: "flex-center" },
-  { pattern: ["flex", "items-center", "justify-between"], suggestion: "flex-between" },
-  { pattern: ["flex", "items-center"], suggestion: "flex-center" },
-  { pattern: ["flex", "flex-col"], suggestion: "flex-col" },
-];
-
-const PATTERN_COUNTS = new Map<string, number>();
-
-function checkSuggestReusablePatterns(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { classes } of extractClassLists(text)) {
-    const bases = classes.map((c) => stripVariants(c));
-    for (const { pattern } of COMMON_PATTERNS) {
-      if (pattern.every((p) => bases.includes(p))) {
-        const key = pattern.join("+");
-        PATTERN_COUNTS.set(key, (PATTERN_COUNTS.get(key) ?? 0) + 1);
-      }
-    }
-  }
-  for (const { pattern, suggestion } of COMMON_PATTERNS) {
-    const key = pattern.join("+");
-    const count = PATTERN_COUNTS.get(key) ?? 0;
-    if (count >= 3) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          0,
-          `Pattern \`${pattern.join(" ")}\` was used ${count} times. Consider extracting an \`@utility ${suggestion}\`.`,
-          "suggest-reusable-patterns",
-        ),
-      );
-      PATTERN_COUNTS.delete(key);
-    }
-  }
-  return results;
-}
-
-// ─── 22. prefer-design-tokens ──────────────────────────────────────────────
+// ─── 21. prefer-design-tokens ──────────────────────────────────────────────
 
 function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -926,11 +885,6 @@ export const ALL_RULES: RuleEntry[] = [
     id: "detect-conflicts-in-template-literals",
     check: checkDetectConflictsInTemplateLiterals,
     description: "Detect conflicting utilities within template literals",
-  },
-  {
-    id: "suggest-reusable-patterns",
-    check: checkSuggestReusablePatterns,
-    description: "Suggest reusable utility patterns",
   },
   {
     id: "prefer-design-tokens",
