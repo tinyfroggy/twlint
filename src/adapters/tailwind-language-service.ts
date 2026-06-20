@@ -17,6 +17,7 @@ import {
 } from "../core/rules.js";
 import { runCustomRules } from "../custom-rules/index.js";
 import type { RuleContext } from "../custom-rules/index.js";
+import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
 
@@ -32,6 +33,16 @@ const CUSTOM_RULE_SET: ReadonlySet<string> = CUSTOM_RULE_IDS;
 export async function createValidationState(cssEntry: string) {
   const { dependencyPaths, designSystem } = await loadDesignSystem(cssEntry);
   const settings = getDefaultTailwindSettings();
+
+  // Harden class extraction: by default the language service only scans
+  // `class`/`className` attributes. Registering common class-helper functions
+  // lets it pull classes out of cva/clsx/cn/tv/... call sites, including
+  // template-literal static segments and object keys, with no AST dependency.
+  settings.tailwindCSS.classFunctions = [
+    ...(settings.tailwindCSS.classFunctions ?? []),
+    ...DEFAULT_CLASS_FUNCTIONS,
+  ];
+
   const state = createState({
     v4: true,
     version: "4",
