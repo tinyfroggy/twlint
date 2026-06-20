@@ -7,8 +7,15 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { loadDesignSystem } from "./tailwind-design-system.js";
 import { normalizeDiagnostic } from "../core/normalize-diagnostic.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
-import { resolveRules, DEFAULT_RULES, type RuleId } from "../core/rules.js";
-import { ALL_RULES, runCustomRules } from "../custom-rules/index.js";
+import {
+  resolveRules,
+  DEFAULT_RULES,
+  LS_RULES,
+  CUSTOM_RULE_IDS,
+  RULE_TO_DIAGNOSTIC_KIND,
+  type RuleId,
+} from "../core/rules.js";
+import { runCustomRules } from "../custom-rules/index.js";
 import type { RuleContext } from "../custom-rules/index.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
@@ -20,21 +27,7 @@ const {
   getDefaultTailwindSettings,
 } = require("@tailwindcss/language-service");
 
-const RULE_TO_DIAGNOSTIC_KIND: Record<string, string> = {
-  "canonical-classes": "suggestCanonicalClasses",
-  "class-conflicts": "cssConflict",
-  "recommended-variant-order": "invalidApply",
-  "used-blocklisted-class": "suggestCanonicalClasses",
-};
-
-const LS_RULES = new Set([
-  "canonical-classes",
-  "class-conflicts",
-  "recommended-variant-order",
-  "used-blocklisted-class",
-]);
-
-const CUSTOM_RULE_SET = new Set<string>(ALL_RULES.map((r) => r.id));
+const CUSTOM_RULE_SET: ReadonlySet<string> = CUSTOM_RULE_IDS;
 
 export async function createValidationState(cssEntry: string) {
   const { dependencyPaths, designSystem } = await loadDesignSystem(cssEntry);
