@@ -42,6 +42,16 @@ jobs:
             echo "Version $CURRENT unchanged — skipping publish"
           fi
 
+      - name: Verify npm token is present
+        if: steps.check.outputs.changed == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is empty or missing. Add an npm automation token as a secret named NPM_TOKEN to the 'release' environment (Settings → Environments → release → Secrets), not as an environment."
+            exit 1
+          fi
+
       - name: Run checks
         if: steps.check.outputs.changed == 'true'
         run: npm run check
