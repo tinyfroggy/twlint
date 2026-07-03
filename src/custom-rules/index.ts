@@ -815,18 +815,40 @@ function checkWarnIncompleteDarkColorPair(text: string, filePath: string): Diagn
 
 // ─── 18. prefer-theme-scale ─────────────────────────────────────────────────
 
+/** Convert an arbitrary value + unit to the nearest Tailwind spacing-scale index (4px base). */
+function toScaleValue(value: number, unit: string): number {
+  if (unit === "px" || unit === "pt" || unit === "pc") {
+    return Math.round(value / 4);
+  }
+  if (unit === "rem" || unit === "em") {
+    return Math.round(value * 4);
+  }
+  // mm/cm — approximate (1mm ≈ 3.78px, 1cm ≈ 37.8px)
+  if (unit === "mm") {
+    return Math.round((value * 3.78) / 4);
+  }
+  if (unit === "cm") {
+    return Math.round((value * 37.8) / 4);
+  }
+  return value;
+}
+
 function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const scaleValueRe = /(?:^|\s)([a-z-]+)-\[(\d+)(?:px|rem|em|pt|pc|mm|cm)\]/g;
+  const scaleValueRe = /(?:^|\s)([a-z-]+)-\[(\d+(?:\.\d+)?)(px|rem|em|pt|pc|mm|cm)\]/g;
   for (const { offset, raw } of extractClassLists(text)) {
     let match: RegExpExecArray | null;
     while ((match = scaleValueRe.exec(raw)) !== null) {
+      const val = Number(match[2]);
+      const unit = match[3];
+      const themeVal = toScaleValue(val, unit);
+      if (val === themeVal) continue; // already a theme-scale index
       results.push(
         diag(
           filePath,
           text,
           offset,
-          `Prefer Tailwind's design scale over arbitrary value \`${match[1]}-[${match[2]}]\`. Use a theme value like \`${match[1]}-${match[2]}\` if it matches the scale.`,
+          `Prefer Tailwind's design scale over arbitrary value \`${match[1]}-[${match[2]}]\`. Use \`${match[1]}-${themeVal}\` instead.`,
           "prefer-theme-scale",
         ),
       );

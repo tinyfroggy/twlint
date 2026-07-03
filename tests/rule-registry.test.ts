@@ -14,14 +14,19 @@ import { ALL_RULES } from "../src/custom-rules/index.js";
 const require = createRequire(import.meta.url);
 
 describe("rule registry single source of truth", () => {
-  it("derives KNOWN_RULES and DEFAULT_RULES from the registry in order", () => {
+  it("derives KNOWN_RULES from the registry in order", () => {
     const ids = RULE_REGISTRY.map((r) => r.id);
     expect(KNOWN_RULES).toEqual(ids);
-    expect(DEFAULT_RULES).toEqual(ids);
   });
 
-  it("has all 25 rules", () => {
-    expect(DEFAULT_RULES).toHaveLength(25);
+  it("has 25 rules in the registry and 21 in DEFAULT_RULES", () => {
+    expect(KNOWN_RULES).toHaveLength(25);
+    expect(DEFAULT_RULES).toHaveLength(21);
+    // DEFAULT_RULES excludes noisy opt-in rules
+    expect(DEFAULT_RULES).not.toContain("prefer-logical-properties");
+    expect(DEFAULT_RULES).not.toContain("require-motion-reduce-for-animation");
+    expect(DEFAULT_RULES).not.toContain("warn-incomplete-dark-color-pair");
+    expect(DEFAULT_RULES).not.toContain("require-grid-for-grid-utilities");
   });
 
   it("custom rules in the registry exactly match the check functions in ALL_RULES", () => {

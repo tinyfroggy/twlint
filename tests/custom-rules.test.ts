@@ -757,13 +757,34 @@ describe("custom rules", () => {
   });
 
   describe("prefer-theme-scale", () => {
-    it("detects arbitrary value in px", () => {
+    it("converts px to scale index (÷4)", () => {
       const diags = runCustomRules(
         ["prefer-theme-scale"],
         '<div className="mt-[16px]" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("mt-4");
+    });
+
+    it("converts px to scale index for width (÷4)", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="w-[220px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("w-55");
+    });
+
+    it("converts rem to scale index (×4)", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="max-h-[28rem]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("max-h-112");
     });
 
     it("passes on theme value", () => {

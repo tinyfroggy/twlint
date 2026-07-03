@@ -165,7 +165,25 @@ export type RuleId = (typeof RULE_REGISTRY)[number]["id"];
 
 export const KNOWN_RULES: RuleId[] = RULE_REGISTRY.map((rule) => rule.id);
 
-export const DEFAULT_RULES: RuleId[] = KNOWN_RULES;
+/**
+ * Default rules enabled with no config.
+ *
+ * Some rules are opt-in because they produce noisy output for common code
+ * patterns or require parent-context analysis that is not yet implemented.
+ *
+ * Opt-in rules (enable via `--rules` or `.twlinter.json`):
+ *   - prefer-logical-properties       (RTL suggestions — not all projects target RTL)
+ *   - require-motion-reduce-for-animation  (AX suggestion — noisy in practice)
+ *   - warn-incomplete-dark-color-pair      (AX suggestion — noisy for every utility)
+ *   - require-grid-for-grid-utilities      (needs parent-context DOM analysis to avoid false positives)
+ */
+export const DEFAULT_RULES: RuleId[] = KNOWN_RULES.filter(
+  (id) =>
+    id !== "prefer-logical-properties" &&
+    id !== "require-motion-reduce-for-animation" &&
+    id !== "warn-incomplete-dark-color-pair" &&
+    id !== "require-grid-for-grid-utilities",
+);
 
 /** Ids of rules handled by @tailwindcss/language-service. */
 export const LS_RULES = new Set<RuleId>(

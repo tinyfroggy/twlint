@@ -64,12 +64,16 @@ describe("resolveRules", () => {
 });
 
 describe("DEFAULT_RULES", () => {
-  it("runs every known rule by default", () => {
-    expect(DEFAULT_RULES).toHaveLength(25);
+  it("runs most known rules by default, excluding noisy opt-in rules", () => {
+    expect(DEFAULT_RULES).toHaveLength(21);
     expect(DEFAULT_RULES).toContain("canonical-classes");
     expect(DEFAULT_RULES).toContain("class-conflicts");
     expect(DEFAULT_RULES).toContain("shorthand-classes");
-    expect(DEFAULT_RULES).toContain("warn-incomplete-dark-color-pair");
     expect(DEFAULT_RULES).toContain("prefer-design-tokens");
+    // Opt-in (too noisy or need parent-context analysis)
+    expect(DEFAULT_RULES).not.toContain("prefer-logical-properties");
+    expect(DEFAULT_RULES).not.toContain("require-motion-reduce-for-animation");
+    expect(DEFAULT_RULES).not.toContain("warn-incomplete-dark-color-pair");
+    expect(DEFAULT_RULES).not.toContain("require-grid-for-grid-utilities");
   });
 });
