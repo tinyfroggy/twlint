@@ -88,41 +88,4 @@ describe("renderPretty", () => {
     );
     expect(output).toContain("(2)");
   });
-
-  it("summarizes long class order suggestions by rule", () => {
-    const output = renderPretty(
-      makeResult([
-        makeDiagnostic({
-          rule: "canonical-class-order",
-          message: "Reorder to: `pl-11`, `font-bold`, `text-sm`, `hover:text-blue-500`",
-        }),
-        makeDiagnostic({
-          file: "src/other.tsx",
-          line: 10,
-          rule: "canonical-class-order",
-          message: "Reorder to: `px-4`, `py-2`, `font-medium`, `hover:bg-blue-600`",
-        }),
-      ]),
-      false,
-    );
-
-    expect(output).toContain("Class order does not match Tailwind's recommended order. (2)");
-    expect(output).toContain("canonical-class-order");
-    expect(output).not.toContain("pl-11");
-    expect(output).toContain("Use --verbose to show the full suggestion text.");
-  });
-
-  it("shows full class order suggestions in verbose mode", () => {
-    const output = renderPretty(
-      makeResult([
-        makeDiagnostic({
-          rule: "canonical-class-order",
-          message: "Reorder to: `pl-11`, `font-bold`, `text-sm`",
-        }),
-      ]),
-      true,
-    );
-
-    expect(output).toContain("Reorder to: `pl-11`, `font-bold`, `text-sm`");
-  });
 });

@@ -85,16 +85,6 @@ export function getShorthandClassDiagnostics(
             : `Replace \`${removed.join(" ")}\` with ${added.map((c) => `\`${c}\``).join(", ")}`,
         source: "tw",
       });
-    } else if (canonicalized.length === classes.length) {
-      diagnostics.push({
-        file: path.relative(process.cwd(), filePath),
-        line: pos.line + 1,
-        column: pos.character + 1,
-        severity: "warning",
-        rule: "shorthand-classes",
-        message: `Reorder to: ${canonicalized.map((c) => `\`${c}\``).join(", ")}`,
-        source: "tw",
-      });
     }
   }
 

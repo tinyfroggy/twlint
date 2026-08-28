@@ -29,7 +29,7 @@ describe("getShorthandClassDiagnostics", () => {
     expect(diags[0].severity).toBe("warning");
   });
 
-  it("reports reorder-only canonicalization", () => {
+  it("ignores reorder-only canonicalization", () => {
     mockDesignSystem.canonicalizeCandidates.mockImplementation((candidates: string[]) => {
       if (candidates.includes("pl-11")) {
         return [
@@ -56,8 +56,7 @@ describe("getShorthandClassDiagnostics", () => {
     );
     const diags = getShorthandClassDiagnostics(mockDesignSystem, doc, "/test.tsx");
 
-    expect(diags).toHaveLength(1);
-    expect(diags[0].message).toContain("Reorder to:");
+    expect(diags).toHaveLength(0);
   });
 
   it("detects px-4 py-4 -> p-4", () => {

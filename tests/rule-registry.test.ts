@@ -19,9 +19,9 @@ describe("rule registry single source of truth", () => {
     expect(KNOWN_RULES).toEqual(ids);
   });
 
-  it("has 25 rules in the registry and 21 in DEFAULT_RULES", () => {
-    expect(KNOWN_RULES).toHaveLength(25);
-    expect(DEFAULT_RULES).toHaveLength(21);
+  it("has 19 rules in the registry and 15 in DEFAULT_RULES", () => {
+    expect(KNOWN_RULES).toHaveLength(19);
+    expect(DEFAULT_RULES).toHaveLength(15);
     // DEFAULT_RULES excludes noisy opt-in rules
     expect(DEFAULT_RULES).not.toContain("prefer-logical-properties");
     expect(DEFAULT_RULES).not.toContain("require-motion-reduce-for-animation");
@@ -70,8 +70,7 @@ describe("rule registry single source of truth", () => {
     }
   });
 
-  it("maps the previously-broken rules to the correct diagnostic kinds", () => {
-    expect(RULE_TO_DIAGNOSTIC_KIND["recommended-variant-order"]).toBe("recommendedVariantOrder");
+  it("maps language-service rules to the correct diagnostic kinds", () => {
     expect(RULE_TO_DIAGNOSTIC_KIND["used-blocklisted-class"]).toBe("usedBlocklistedClass");
   });
 });
