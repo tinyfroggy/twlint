@@ -6,23 +6,8 @@ import {
   extractApplyBlocks,
   stripVariants,
   parseClassName,
-  extractElements,
 } from "./utils.js";
-import {
-  hasBaseInScope,
-  normalizeRuleContext,
-  resolveElementClasses,
-  type RuleContext,
-} from "./context.js";
-export type { RuleContext } from "./context.js";
-
-export type RuleCheck = (text: string, filePath: string, context?: RuleContext) => Diagnostic[];
-
-export type RuleEntry = {
-  id: string;
-  check: RuleCheck;
-  description: string;
-};
+type RuleCheck = (text: string, filePath: string) => Diagnostic[];
 
 function positionAtOffset(fileText: string, offset: number): { line: number; column: number } {
   const before = fileText.slice(0, offset);
@@ -49,7 +34,7 @@ function diag(
   };
 }
 
-// ─── 1. no-duplicate-utilities ──────────────────────────────────────────────
+// ─── no-duplicate-utilities ─────────────────────────────────────────────────
 
 function checkNoDuplicateUtilities(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -84,7 +69,7 @@ function checkNoDuplicateUtilities(text: string, filePath: string): Diagnostic[]
   return results;
 }
 
-// ─── 3. prefer-truncate-shorthand ────────────────────────────────────────────
+// ─── prefer-truncate-shorthand ──────────────────────────────────────────────
 
 function checkPreferTruncateShorthand(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -109,7 +94,7 @@ function checkPreferTruncateShorthand(text: string, filePath: string): Diagnosti
   return results;
 }
 
-// ─── 4. no-important-abuse ──────────────────────────────────────────────────
+// ─── no-important-abuse ─────────────────────────────────────────────────────
 
 function checkNoImportantAbuse(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -172,7 +157,7 @@ function checkNoSrOnlyDisplayConflict(text: string, filePath: string): Diagnosti
   return results;
 }
 
-// ─── 7. consistent-negative-arbitrary-values ─────────────────────────────────
+// ─── consistent-negative-arbitrary-values ───────────────────────────────────
 
 function checkConsistentNegativeArbitraryValues(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -194,87 +179,9 @@ function checkConsistentNegativeArbitraryValues(text: string, filePath: string):
   return results;
 }
 
-// ─── 8. prefer-logical-properties ────────────────────────────────────────────
-
-const PHYSICAL_TO_LOGICAL: Record<string, string> = {
-  pl: "ps",
-  pr: "pe",
-  ml: "ms",
-  mr: "me",
-  "border-l": "border-s",
-  "border-r": "border-e",
-  "rounded-l": "rounded-s",
-  "rounded-r": "rounded-e",
-  "rounded-tl": "rounded-ss",
-  "rounded-tr": "rounded-se",
-  "rounded-bl": "rounded-es",
-  "rounded-br": "rounded-ee",
-  left: "start",
-  right: "end",
-};
-
-function checkPreferLogicalProperties(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    for (const c of classes) {
-      const parsed = parseClassName(c);
-      if (parsed.variant) continue;
-      for (const [phys, log] of Object.entries(PHYSICAL_TO_LOGICAL)) {
-        if (parsed.base === phys || parsed.base.startsWith(phys + "-")) {
-          const replacement = parsed.base.replace(phys, log);
-          if (replacement !== parsed.base) {
-            results.push(
-              diag(
-                filePath,
-                text,
-                offset,
-                `Use \`${replacement}\` instead of \`${parsed.base}\` for better RTL support.`,
-                "prefer-logical-properties",
-              ),
-            );
-          }
-        }
-      }
-    }
-  }
-  return results;
-}
-
-// ─── 9. require-motion-reduce-for-animation ──────────────────────────────────
-
-function checkRequireMotionReduceForAnimation(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    let hasAnimation = false;
-    let hasMotionReduce = false;
-    for (const c of classes) {
-      const parsed = parseClassName(c);
-      if (parsed.base.startsWith("animate-") && parsed.base !== "animate-none") {
-        if (!parsed.variant) hasAnimation = true;
-      }
-      if (parsed.variant === "motion-reduce") {
-        if (parsed.base.startsWith("animate-")) hasMotionReduce = true;
-      }
-    }
-    if (hasAnimation && !hasMotionReduce) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          offset,
-          "Add `motion-reduce:animate-none` for users who prefer reduced motion.",
-          "require-motion-reduce-for-animation",
-        ),
-      );
-    }
-  }
-  return results;
-}
-
-// ─── 11. require-flex-for-flex-utilities ─────────────────────────────────────
+// ─── require-flex-for-flex-utilities ────────────────────────────────────────
 
 const FLEX_DISPLAY_BASES = new Set(["flex", "inline-flex"]);
-const GRID_DISPLAY_BASES = new Set(["grid", "inline-grid"]);
 
 const FLEX_CONTAINER_CLASSES = [
   "flex-col",
@@ -286,48 +193,23 @@ const FLEX_CONTAINER_CLASSES = [
   "flex-wrap-reverse",
 ];
 
-function checkRequireFlexForFlexUtilities(
-  text: string,
-  filePath: string,
-  context?: RuleContext,
-): Diagnostic[] {
+function checkRequireFlexForFlexUtilities(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const ruleContext = normalizeRuleContext(context);
-  const strict = ruleContext.strict ?? false;
 
   for (const el of extractElementsWithClasses(text)) {
-    const resolved = resolveElementClasses(el, ruleContext);
-    const culprits = resolved.userClasses.filter((className) =>
-      FLEX_CONTAINER_CLASSES.includes(className.base),
-    );
+    if (el.isComponent) continue;
+
+    const classes = el.classes.map((className) => parseClassName(className));
+    const culprits = classes.filter((className) => FLEX_CONTAINER_CLASSES.includes(className.base));
     for (const culprit of culprits) {
-      if (hasBaseInScope(resolved.effectiveClasses, culprit.responsive, FLEX_DISPLAY_BASES))
-        continue;
+      if (hasBaseInScope(classes, culprit.responsive, FLEX_DISPLAY_BASES)) continue;
 
-      if (resolved.kind === "unknown-component") {
-        if (!strict) continue;
-        results.push(
-          diag(
-            filePath,
-            text,
-            resolved.offset,
-            `Low confidence: \`${culprit.base}\` requires \`flex\` or \`inline-flex\` unless \`${resolved.tag}\` provides it internally.`,
-            "require-flex-for-flex-utilities",
-          ),
-        );
-        continue;
-      }
-
-      const suffix =
-        resolved.kind === "known-component"
-          ? ` Component \`${resolved.tag}\` does not provide it internally.`
-          : "";
       results.push(
         diag(
           filePath,
           text,
-          resolved.offset,
-          `\`${culprit.base}\` requires \`flex\` or \`inline-flex\` to have an effect.${suffix}`,
+          el.offset,
+          `\`${culprit.base}\` requires \`flex\` or \`inline-flex\` to have an effect.`,
           "require-flex-for-flex-utilities",
         ),
       );
@@ -356,179 +238,7 @@ function checkRequireFlexForFlexUtilities(
   return results;
 }
 
-// ─── 12. require-grid-for-grid-utilities ─────────────────────────────────────
-
-const GRID_CONTAINER_CLASSES = [
-  "grid-cols-",
-  "grid-rows-",
-  "auto-cols-",
-  "auto-rows-",
-  "col-span-",
-  "row-span-",
-  "col-start-",
-  "col-end-",
-  "row-start-",
-  "row-end-",
-];
-
-function checkRequireGridForGridUtilities(
-  text: string,
-  filePath: string,
-  context?: RuleContext,
-): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const ruleContext = normalizeRuleContext(context);
-  const strict = ruleContext.strict ?? false;
-
-  for (const el of extractElementsWithClasses(text)) {
-    const resolved = resolveElementClasses(el, ruleContext);
-    const culprits = resolved.userClasses.filter((className) =>
-      GRID_CONTAINER_CLASSES.some((prefix) => className.base.startsWith(prefix)),
-    );
-    for (const culprit of culprits) {
-      if (hasBaseInScope(resolved.effectiveClasses, culprit.responsive, GRID_DISPLAY_BASES))
-        continue;
-
-      if (resolved.kind === "unknown-component") {
-        if (!strict) continue;
-        results.push(
-          diag(
-            filePath,
-            text,
-            resolved.offset,
-            `Low confidence: \`${culprit.base}\` requires \`grid\` or \`inline-grid\` unless \`${resolved.tag}\` provides it internally.`,
-            "require-grid-for-grid-utilities",
-          ),
-        );
-        continue;
-      }
-
-      const suffix =
-        resolved.kind === "known-component"
-          ? ` Component \`${resolved.tag}\` does not provide it internally.`
-          : "";
-      results.push(
-        diag(
-          filePath,
-          text,
-          resolved.offset,
-          `\`${culprit.base}\` requires \`grid\` or \`inline-grid\` to have an effect.${suffix}`,
-          "require-grid-for-grid-utilities",
-        ),
-      );
-    }
-  }
-
-  for (const { offset, classes } of extractApplyBlocks(text)) {
-    const bases = new Set(classes.map((c) => stripVariants(c)));
-    if (bases.has("grid") || bases.has("inline-grid")) continue;
-    for (const prefix of GRID_CONTAINER_CLASSES) {
-      for (const b of bases) {
-        if (b.startsWith(prefix)) {
-          results.push(
-            diag(
-              filePath,
-              text,
-              offset,
-              `\`${b}\` requires \`grid\` or \`inline-grid\` to have an effect.`,
-              "require-grid-for-grid-utilities",
-            ),
-          );
-          break;
-        }
-      }
-    }
-  }
-
-  return results;
-}
-
-// ─── 15. warn-hover-on-disabled ─────────────────────────────────────────────
-
-function checkWarnHoverOnDisabled(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const elements = extractElements(text);
-  for (const el of elements) {
-    if (el.attrs["disabled"] === undefined) continue;
-    const classStr = el.attrs["className"] ?? el.attrs["class"] ?? "";
-    if (!classStr) continue;
-    const classes = classStr.trim().split(/\s+/).filter(Boolean);
-    let hasHover = false;
-    for (const c of classes) {
-      const parsed = parseClassName(c);
-      if (parsed.variant === "hover") {
-        hasHover = true;
-        break;
-      }
-    }
-    if (hasHover) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          el.offset,
-          "Disabled element has `hover:*` variant which will not work. Use `disabled:*` variants instead.",
-          "warn-hover-on-disabled",
-        ),
-      );
-    }
-  }
-  return results;
-}
-
-// ─── 17. warn-incomplete-dark-color-pair ─────────────────────────────────────
-
-const COLOR_PROPERTIES = [
-  "text-",
-  "bg-",
-  "border-",
-  "ring-",
-  "outline-",
-  "shadow-",
-  "decoration-",
-  "accent-",
-  "caret-",
-];
-
-function checkWarnIncompleteDarkColorPair(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    const parsed = classes.map((c) => parseClassName(c));
-    const lightColors = new Set<string>();
-    const darkColors = new Set<string>();
-    for (const p of parsed) {
-      if (p.variant === "dark") {
-        for (const prop of COLOR_PROPERTIES) {
-          if (p.base.startsWith(prop)) {
-            darkColors.add(prop);
-          }
-        }
-      } else if (!p.variant) {
-        for (const prop of COLOR_PROPERTIES) {
-          if (p.base.startsWith(prop)) {
-            lightColors.add(prop);
-          }
-        }
-      }
-    }
-    for (const prop of lightColors) {
-      if (!darkColors.has(prop)) {
-        results.push(
-          diag(
-            filePath,
-            text,
-            offset,
-            `\`${prop}*\` has a light mode value but no \`dark:${prop}*\` counterpart. Consider adding one for dark mode support.`,
-            "warn-incomplete-dark-color-pair",
-          ),
-        );
-      }
-    }
-  }
-  return results;
-}
-
-// ─── 18. prefer-theme-scale ─────────────────────────────────────────────────
+// ─── prefer-theme-scale ─────────────────────────────────────────────────────
 
 /** Convert an arbitrary value + unit to a Tailwind spacing-scale index (4px base). */
 function toScaleValue(value: number, unit: string): number {
@@ -615,7 +325,7 @@ function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
   return results;
 }
 
-// ─── 19. no-magic-spacing ───────────────────────────────────────────────────
+// ─── no-magic-spacing ───────────────────────────────────────────────────────
 
 function checkNoMagicSpacing(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -643,7 +353,7 @@ function checkNoMagicSpacing(text: string, filePath: string): Diagnostic[] {
   return results;
 }
 
-// ─── 20. detect-conflicts-in-template-literals ──────────────────────────────
+// ─── detect-conflicts-in-template-literals ─────────────────────────────────
 
 function checkDetectConflictsInTemplateLiterals(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -709,7 +419,7 @@ function checkDetectConflictsInTemplateLiterals(text: string, filePath: string):
   return results;
 }
 
-// ─── 21. prefer-design-tokens ──────────────────────────────────────────────
+// ─── prefer-design-tokens ───────────────────────────────────────────────────
 
 function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
@@ -733,112 +443,38 @@ function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
   return results;
 }
 
-// ─── Rule Registry ───────────────────────────────────────────────────────────
-
-export const ALL_RULES: RuleEntry[] = [
-  {
-    id: "no-duplicate-utilities",
-    check: checkNoDuplicateUtilities,
-    description: "Detect repeated identical utilities",
-  },
-  {
-    id: "prefer-truncate-shorthand",
-    check: checkPreferTruncateShorthand,
-    description: "Suggest truncate over overflow-hidden text-ellipsis whitespace-nowrap",
-  },
-  {
-    id: "no-important-abuse",
-    check: checkNoImportantAbuse,
-    description: "Warn when !important is overused",
-  },
-  {
-    id: "no-sr-only-display-conflict",
-    check: checkNoSrOnlyDisplayConflict,
-    description: "Detect sr-only combined with display utilities",
-  },
-  {
-    id: "consistent-negative-arbitrary-values",
-    check: checkConsistentNegativeArbitraryValues,
-    description: "Enforce consistent negative arbitrary value syntax",
-  },
-  {
-    id: "prefer-logical-properties",
-    check: checkPreferLogicalProperties,
-    description: "Encourage logical properties over physical left/right",
-  },
-  {
-    id: "require-motion-reduce-for-animation",
-    check: checkRequireMotionReduceForAnimation,
-    description: "Require motion-reduce variant for animations",
-  },
-  {
-    id: "require-flex-for-flex-utilities",
-    check: checkRequireFlexForFlexUtilities,
-    description: "Detect flex container utilities without flex",
-  },
-  {
-    id: "require-grid-for-grid-utilities",
-    check: checkRequireGridForGridUtilities,
-    description: "Detect grid utilities without grid",
-  },
-  {
-    id: "warn-hover-on-disabled",
-    check: checkWarnHoverOnDisabled,
-    description: "Detect hover variants on disabled elements",
-  },
-  {
-    id: "warn-incomplete-dark-color-pair",
-    check: checkWarnIncompleteDarkColorPair,
-    description: "Detect incomplete dark mode color pairs",
-  },
-  {
-    id: "prefer-theme-scale",
-    check: checkPreferThemeScale,
-    description: "Prefer Tailwind design tokens over arbitrary values with theme-matching units",
-  },
-  {
-    id: "no-magic-spacing",
-    check: checkNoMagicSpacing,
-    description: "Detect spacing values that don't match the 4px design grid",
-  },
-  {
-    id: "detect-conflicts-in-template-literals",
-    check: checkDetectConflictsInTemplateLiterals,
-    description: "Detect conflicting utilities within template literals",
-  },
-  {
-    id: "prefer-design-tokens",
-    check: checkPreferDesignTokens,
-    description: "Prefer design tokens over raw hex colors",
-  },
+const CUSTOM_RULES: RuleCheck[] = [
+  checkNoDuplicateUtilities,
+  checkPreferTruncateShorthand,
+  checkNoImportantAbuse,
+  checkNoSrOnlyDisplayConflict,
+  checkConsistentNegativeArbitraryValues,
+  checkRequireFlexForFlexUtilities,
+  checkPreferThemeScale,
+  checkNoMagicSpacing,
+  checkDetectConflictsInTemplateLiterals,
+  checkPreferDesignTokens,
 ];
 
-const RULE_MAP = new Map<string, RuleCheck>();
-for (const rule of ALL_RULES) {
-  RULE_MAP.set(rule.id, rule.check);
-}
-
-export function getRuleCheck(id: string): RuleCheck | undefined {
-  return RULE_MAP.get(id);
-}
-
-export function runCustomRules(
-  ruleIds: string[],
-  text: string,
-  filePath: string,
-  context?: RuleContext,
-): Diagnostic[] {
+export function runCustomRules(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const ruleContext = normalizeRuleContext(context);
-  for (const id of ruleIds) {
-    const check = getRuleCheck(id);
-    if (check) {
-      try {
-        results.push(...check(text, filePath, ruleContext));
-      } catch {
-        // skip failing rules
-      }
+  for (const rule of CUSTOM_RULES) {
+    try {
+      results.push(...rule(text, filePath));
+    } catch {
+      // One failing check should not hide other diagnostics.
     }
   }
   return results;
+}
+
+function hasBaseInScope(
+  classes: ReturnType<typeof parseClassName>[],
+  targetScope: string,
+  bases: Set<string>,
+): boolean {
+  return classes.some((className) => {
+    if (!bases.has(className.base)) return false;
+    return className.responsive === "" || className.responsive === targetScope;
+  });
 }

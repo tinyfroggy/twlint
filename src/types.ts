@@ -3,24 +3,9 @@ export type Diagnostic = {
   line: number;
   column: number;
   rule: string;
-  severity: "warning" | "error";
+  severity: "warning";
   message: string;
   source: string;
-};
-
-import type { ComponentInfo } from "./config/types.js";
-
-export type LintOptions = {
-  verbose?: boolean;
-  config?: string;
-  ignorePatterns?: string[];
-  classIgnorePatterns?: string[];
-  includePatterns?: string[];
-  maxFileSize?: number;
-  rules?: string[];
-  cssEntry?: string;
-  components?: Record<string, ComponentInfo>;
-  strict?: boolean;
 };
 
 export type LintResult = {
@@ -28,18 +13,6 @@ export type LintResult = {
   scannedFiles: number;
   elapsedMilliseconds: number;
   diagnostics: Diagnostic[];
-  project: ProjectInfo;
-};
-
-export type ProjectInfo = {
-  rootDirectory: string;
-  cssEntryPath: string | null;
-  tailwindVersion: string | null;
-  supported: boolean;
-  sourceExtensions: string[];
-  isMonorepo: boolean;
-  monorepoTool: "npm" | "pnpm" | "yarn" | "nx" | null;
-  workspacePackages: string[];
 };
 
 export type CandidateInput = {
@@ -55,6 +28,5 @@ export type TailwindDiagnostic = {
       character: number;
     };
   };
-  severity?: number;
   code?: string;
 };

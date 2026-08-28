@@ -23,9 +23,7 @@ beforeAll(async () => {
 });
 
 async function lint(text: string): Promise<Diagnostic[]> {
-  return validateCandidate(state, designSystem, { file: "/virtual/component.tsx", text }, [
-    "canonical-classes",
-  ]);
+  return validateCandidate(state, designSystem, { file: "/virtual/component.tsx", text });
 }
 
 function flagsNonCanonical(diagnostics: Diagnostic[]): boolean {
@@ -90,12 +88,10 @@ describe("class extraction inside wrapper helpers", () => {
   });
 
   it("works in plain .ts modules without JSX", async () => {
-    const diagnostics = await validateCandidate(
-      state,
-      designSystem,
-      { file: "/virtual/styles.ts", text: `export const styles = cn("${NON_CANONICAL}");` },
-      ["canonical-classes"],
-    );
+    const diagnostics = await validateCandidate(state, designSystem, {
+      file: "/virtual/styles.ts",
+      text: `export const styles = cn("${NON_CANONICAL}");`,
+    });
     expect(flagsNonCanonical(diagnostics)).toBe(true);
   });
 
