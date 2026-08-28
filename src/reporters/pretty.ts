@@ -128,10 +128,6 @@ function renderGroup(group: DiagnosticGroup, verbose: boolean, lines: string[]):
 }
 
 function summarizeMessage(diagnostic: Diagnostic): string {
-  if (/^Reorder to:/i.test(diagnostic.message)) {
-    return "Class order does not match Tailwind's recommended order.";
-  }
-
   if (diagnostic.message.length > 140) {
     return `${diagnostic.message.slice(0, 137).trimEnd()}...`;
   }

@@ -220,39 +220,38 @@ console.log(
 
 ## Rules
 
-Default rules run every known check so `twlinter .` catches everything without configuration. Use `--rules` or `.twlinter.json` only when you intentionally want a smaller rule set.
+The default rule set focuses on correctness without noisy false positives.
+Some rules are opt-in because they produce many warnings in common code
+patterns or need parent-context analysis that is not yet implemented.
 
 Default rule ids:
 
 ```txt
 class-conflicts
 canonical-classes
-recommended-variant-order
 used-blocklisted-class
 shorthand-classes
 no-duplicate-utilities
-canonical-class-order
 prefer-truncate-shorthand
 no-important-abuse
 no-sr-only-display-conflict
 consistent-negative-arbitrary-values
-prefer-logical-properties
-require-motion-reduce-for-animation
-no-orphan-layout-utilities
 require-flex-for-flex-utilities
-require-grid-for-grid-utilities
-warn-ineffective-z-index
-require-display-for-sizing
 warn-hover-on-disabled
-require-focus-visible-for-interactive
-warn-incomplete-dark-color-pair
 prefer-theme-scale
 no-magic-spacing
 detect-conflicts-in-template-literals
 prefer-design-tokens
 ```
 
-Run a smaller rule set with `--rules` or `.twlinter.json`:
+Opt-in rules (enable with `--rules` or `.twlinter.json`):
+
+```txt
+prefer-logical-properties
+require-motion-reduce-for-animation
+warn-incomplete-dark-color-pair
+require-grid-for-grid-utilities
+```
 
 ```bash
 twlinter . --rules canonical-classes,shorthand-classes,prefer-logical-properties
@@ -262,29 +261,23 @@ twlinter . --rules canonical-classes,shorthand-classes,prefer-logical-properties
 | --------------------------------------- | ------- | -------------------------------------------------------------------- |
 | `canonical-classes`                     | On      | Suggests canonical Tailwind class names for arbitrary values         |
 | `class-conflicts` / `no-conflicting-utilities` | On      | Detect CSS class conflicts on the same element                      |
-| `recommended-variant-order`             | On      | Check variant ordering follows Tailwind conventions                  |
 | `used-blocklisted-class`                | On      | Detect usage of blocklisted or legacy classes                        |
 | `shorthand-classes` / `prefer-shorthand` | On      | Suggest shorthand classes (e.g. `w-10 h-10` → `size-10`)            |
 | `no-duplicate-utilities`                | On      | Detect repeated identical utilities (e.g. `p-4 p-4`)                |
-| `canonical-class-order`                 | On      | Enforce deterministic utility ordering (base → sm → md → lg → xl)   |
 | `prefer-truncate-shorthand`             | On      | Suggest `truncate` over `overflow-hidden text-ellipsis whitespace-nowrap` |
 | `no-important-abuse`                    | On      | Warn when `!important` is overused (>2 per class list)               |
 | `no-sr-only-display-conflict`           | On      | Detect `sr-only` combined with display utilities                     |
 | `consistent-negative-arbitrary-values`  | On      | Enforce `-top-[5px]` over `top-[-5px]` syntax                       |
-| `prefer-logical-properties`             | On      | Encourage `ps-*`/`pe-*` over `pl-*`/`pr-*` for RTL support          |
-| `require-motion-reduce-for-animation`   | On      | Require `motion-reduce:animate-none` for animations                  |
-| `no-orphan-layout-utilities`            | On      | Detect `items-center`/`justify-center` without `flex`/`grid`        |
+| `prefer-logical-properties`             | Off     | Encourage `ps-*`/`pe-*` over `pl-*`/`pr-*` for RTL support          |
+| `require-motion-reduce-for-animation`   | Off     | Require `motion-reduce:animate-none` for animations                  |
 | `require-flex-for-flex-utilities`       | On      | Detect `flex-col`/`flex-wrap` without `flex`                         |
-| `require-grid-for-grid-utilities`       | On      | Detect `grid-cols-*`/`grid-rows-*` without `grid`                    |
-| `warn-ineffective-z-index`              | On      | Detect `z-*` without `relative`/`absolute`/`fixed`/`sticky`          |
-| `require-display-for-sizing`            | On      | Detect sizing on inline elements without `inline-block`              |
+| `require-grid-for-grid-utilities`       | Off     | Detect `grid-cols-*`/`grid-rows-*` without `grid` (needs parent-context analysis; opt-in due to false positives) |
 | `warn-hover-on-disabled`                | On      | Detect `hover:*` on disabled elements                                |
-| `require-focus-visible-for-interactive` | On      | Require `focus-visible:*` on interactive elements with `hover:*`     |
-| `warn-incomplete-dark-color-pair`       | On      | Detect light-mode colors without `dark:*` counterparts               |
-| `prefer-theme-scale`                    | On      | Prefer Tailwind design scale over arbitrary values                   |
-| `no-magic-spacing`                      | On      | Detect spacing values not aligned to the 4px design grid             |
+| `warn-incomplete-dark-color-pair`       | Off     | Detect light-mode colors without `dark:*` counterparts               |
+| `prefer-theme-scale`                    | On      | Prefer valid theme tokens and explain how to define missing font-size tokens |
+| `no-magic-spacing`                      | On      | Replace arbitrary spacing with the exact Tailwind scale class        |
 | `detect-conflicts-in-template-literals` | On      | Detect duplicate utilities in template literal class names           |
-| `prefer-design-tokens`                  | On      | Prefer design tokens over raw hex colors                             |
+| `prefer-design-tokens`                  | On      | Show how to move raw hex colors into global CSS theme tokens         |
 
 Specify rules in `.twlinter.json` or programmatically via `LintOptions.rules`. Use comma-separated names with `--rules` on the CLI when you want to narrow the scan for local debugging.
 

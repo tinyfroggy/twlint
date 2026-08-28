@@ -238,27 +238,6 @@ describe("custom rules", () => {
     });
   });
 
-  describe("canonical-class-order", () => {
-    it("warns on variant out of order", () => {
-      const diags = runCustomRules(
-        ["canonical-class-order"],
-        '<div className="md:p-4 p-2" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("p-2");
-    });
-
-    it("passes on correct order", () => {
-      const diags = runCustomRules(
-        ["canonical-class-order"],
-        '<div className="p-2 md:p-4 lg:p-8" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
   describe("prefer-truncate-shorthand", () => {
     it("detects truncate replacement", () => {
       const diags = runCustomRules(
@@ -380,68 +359,6 @@ describe("custom rules", () => {
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("no-orphan-layout-utilities", () => {
-    it("detects orphan items-center", () => {
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<div className="items-center justify-center" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(2);
-    });
-
-    it("passes with flex present", () => {
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<div className="flex items-center justify-center" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("passes on known component that provides flex internally", () => {
-      initRegistry({ DialogFooter: { baseClasses: "flex gap-2" } }, false);
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<DialogFooter className="items-center justify-center gap-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("warns on known component that does not provide flex/grid", () => {
-      initRegistry({ StaticBox: { baseClasses: "border p-4" } }, false);
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<StaticBox className="items-center" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("does not provide them internally");
-    });
-
-    it("skips unknown component without strict mode", () => {
-      initRegistry({}, false);
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<Unknown className="items-center" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("warns on unknown component with strict mode", () => {
-      initRegistry({}, true);
-      const diags = runCustomRules(
-        ["no-orphan-layout-utilities"],
-        '<Unknown className="items-center" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("Low confidence");
     });
   });
 
@@ -647,55 +564,6 @@ describe("custom rules", () => {
     });
   });
 
-  describe("warn-ineffective-z-index", () => {
-    it("detects z-50 without positioning", () => {
-      const diags = runCustomRules(
-        ["warn-ineffective-z-index"],
-        '<div className="z-50" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes with relative", () => {
-      const diags = runCustomRules(
-        ["warn-ineffective-z-index"],
-        '<div className="relative z-50" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("require-display-for-sizing", () => {
-    it("detects sizing on span without block display", () => {
-      const diags = runCustomRules(
-        ["require-display-for-sizing"],
-        '<span className="w-4 h-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes on span with inline-block", () => {
-      const diags = runCustomRules(
-        ["require-display-for-sizing"],
-        '<span className="inline-block size-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("passes on div with sizing", () => {
-      const diags = runCustomRules(
-        ["require-display-for-sizing"],
-        '<div className="w-4 h-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
   describe("warn-hover-on-disabled", () => {
     it("detects hover on disabled button", () => {
       const diags = runCustomRules(
@@ -710,26 +578,6 @@ describe("custom rules", () => {
       const diags = runCustomRules(
         ["warn-hover-on-disabled"],
         '<button className="hover:bg-blue-600" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("require-focus-visible-for-interactive", () => {
-    it("detects hover without focus-visible on button", () => {
-      const diags = runCustomRules(
-        ["require-focus-visible-for-interactive"],
-        '<button className="hover:bg-blue-600" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes with focus-visible present", () => {
-      const diags = runCustomRules(
-        ["require-focus-visible-for-interactive"],
-        '<button className="hover:bg-blue-600 focus-visible:ring-2" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
@@ -757,13 +605,75 @@ describe("custom rules", () => {
   });
 
   describe("prefer-theme-scale", () => {
-    it("detects arbitrary value in px", () => {
+    it("converts px to scale index (÷4)", () => {
       const diags = runCustomRules(
         ["prefer-theme-scale"],
         '<div className="mt-[16px]" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("mt-4");
+    });
+
+    it("converts px to scale index for width (÷4)", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="w-[220px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("w-55");
+    });
+
+    it("converts rem to scale index (×4)", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="max-h-[28rem]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("max-h-112");
+    });
+
+    it("uses a built-in font-size token when available", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="text-[14px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("matches built-in `text-sm` (14px)");
+    });
+
+    it("shows the nearest size and exact custom-token option", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="text-[13px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("nearest is `text-sm` (14px, 1px larger)");
+      expect(diags[0].message).toContain("@theme { --text-13: 13px; }");
+      expect(diags[0].message).toContain("use `text-13`");
+    });
+
+    it("handles font sizes behind variants", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="sm:text-[10px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("@theme { --text-10: 10px; }");
+    });
+
+    it("does not apply the spacing scale to unrelated utilities", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="rounded-[10px]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
     });
 
     it("passes on theme value", () => {
@@ -773,13 +683,14 @@ describe("custom rules", () => {
   });
 
   describe("no-magic-spacing", () => {
-    it("detects magic spacing value", () => {
+    it("shows the exact Tailwind class replacement", () => {
       const diags = runCustomRules(
         ["no-magic-spacing"],
-        '<div className="mt-[37px]" />',
+        '<div className="ms-[17px]" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(1);
+      expect(diags[0].message).toBe("Class `ms-[17px]` can be written as `ms-4.25`.");
     });
 
     it("passes on grid-aligned value", () => {
@@ -820,6 +731,8 @@ describe("custom rules", () => {
         "/test.tsx",
       );
       expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("@theme { --color-custom: #121212; }");
+      expect(diags[0].message).toContain("use `bg-custom`");
     });
 
     it("passes on design token", () => {

@@ -7,7 +7,6 @@ import {
   stripVariants,
   parseClassName,
   extractElements,
-  INLINE_TAGS,
 } from "./utils.js";
 import {
   hasBaseInScope,
@@ -79,63 +78,6 @@ function checkNoDuplicateUtilities(text: string, filePath: string): Diagnostic[]
             "no-duplicate-utilities",
           ),
         );
-      }
-    }
-  }
-  return results;
-}
-
-// ─── 2. canonical-class-order ────────────────────────────────────────────────
-
-const RESPONSIVE_ORDER = ["", "sm", "md", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl"];
-
-const STATE_VARIANTS = new Set([
-  "hover",
-  "focus",
-  "focus-visible",
-  "active",
-  "visited",
-  "disabled",
-  "group-hover",
-  "group-focus",
-  "peer-hover",
-  "peer-focus",
-  "dark",
-  "light",
-  "motion-safe",
-  "motion-reduce",
-]);
-
-function variantOrderIndex(v: string): number {
-  const idx = RESPONSIVE_ORDER.indexOf(v);
-  if (idx !== -1) return idx;
-  if (v.startsWith("max-")) return RESPONSIVE_ORDER.indexOf(v.slice(4)) + 100;
-  if (v.startsWith("min-[") || v.startsWith("max-[")) return 200;
-  if (STATE_VARIANTS.has(v)) return 300;
-  return 400;
-}
-
-function checkCanonicalClassOrder(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    const parsed = classes.map((c) => parseClassName(c));
-    for (let i = 1; i < parsed.length; i++) {
-      const prev = parsed[i - 1];
-      const curr = parsed[i];
-      const prevIdx = variantOrderIndex(prev.variant);
-      const currIdx = variantOrderIndex(curr.variant);
-      if (currIdx < prevIdx) {
-        results.push(
-          diag(
-            filePath,
-            text,
-            offset,
-            `Class \`${curr.original}\` should come before \`${prev.original}\`. ` +
-              `Expected variant order: base → sm → md → lg → xl → 2xl → state variants.`,
-            "canonical-class-order",
-          ),
-        );
-        break;
       }
     }
   }
@@ -329,124 +271,10 @@ function checkRequireMotionReduceForAnimation(text: string, filePath: string): D
   return results;
 }
 
-// ─── 10. no-orphan-layout-utilities ──────────────────────────────────────────
-
-const FLEX_GRID_CHILD_CLASSES = [
-  "items-",
-  "justify-",
-  "content-",
-  "place-items-",
-  "place-content-",
-  "place-self-",
-  "justify-self-",
-  "justify-items-",
-  "self-",
-];
-
-function hasFlexOrGrid(bases: Set<string>): boolean {
-  return (
-    bases.has("flex") || bases.has("grid") || bases.has("inline-flex") || bases.has("inline-grid")
-  );
-}
+// ─── 11. require-flex-for-flex-utilities ─────────────────────────────────────
 
 const FLEX_DISPLAY_BASES = new Set(["flex", "inline-flex"]);
 const GRID_DISPLAY_BASES = new Set(["grid", "inline-grid"]);
-const FLEX_OR_GRID_DISPLAY_BASES = new Set(["flex", "inline-flex", "grid", "inline-grid"]);
-
-function checkNoOrphanLayoutUtilities(
-  text: string,
-  filePath: string,
-  context?: RuleContext,
-): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const ruleContext = normalizeRuleContext(context);
-  const strict = ruleContext.strict ?? false;
-
-  for (const el of extractElementsWithClasses(text)) {
-    const resolved = resolveElementClasses(el, ruleContext);
-    const culprits = resolved.userClasses.filter(
-      (className) =>
-        FLEX_GRID_CHILD_CLASSES.some((prefix) => className.base.startsWith(prefix)) ||
-        className.base.startsWith("gap-"),
-    );
-    for (const culprit of culprits) {
-      if (
-        hasBaseInScope(resolved.effectiveClasses, culprit.responsive, FLEX_OR_GRID_DISPLAY_BASES)
-      ) {
-        continue;
-      }
-
-      if (resolved.kind === "unknown-component") {
-        if (!strict) continue;
-        results.push(
-          diag(
-            filePath,
-            text,
-            resolved.offset,
-            `Low confidence: \`${culprit.base}\` requires \`flex\` or \`grid\` context unless \`${resolved.tag}\` provides it internally.`,
-            "no-orphan-layout-utilities",
-          ),
-        );
-        continue;
-      }
-
-      const suffix =
-        resolved.kind === "known-component"
-          ? ` Component \`${resolved.tag}\` does not provide them internally.`
-          : "";
-      results.push(
-        diag(
-          filePath,
-          text,
-          resolved.offset,
-          `\`${culprit.base}\` requires \`flex\` or \`grid\` context but neither is present.${suffix}`,
-          "no-orphan-layout-utilities",
-        ),
-      );
-    }
-  }
-
-  for (const { offset, classes } of extractApplyBlocks(text)) {
-    const bases = new Set(classes.map((c) => stripVariants(c)));
-
-    if (hasFlexOrGrid(bases)) continue;
-
-    for (const prefix of FLEX_GRID_CHILD_CLASSES) {
-      for (const b of bases) {
-        if (b.startsWith(prefix)) {
-          results.push(
-            diag(
-              filePath,
-              text,
-              offset,
-              `\`${b}\` requires \`flex\` or \`grid\` parent context but neither is present.`,
-              "no-orphan-layout-utilities",
-            ),
-          );
-          break;
-        }
-      }
-    }
-
-    if (!bases.has("flex") && !bases.has("inline-flex")) {
-      if (bases.has("gap-") || [...bases].some((b) => b.startsWith("gap-"))) {
-        results.push(
-          diag(
-            filePath,
-            text,
-            offset,
-            "`gap-*` requires `flex` or `grid` parent context but neither is present.",
-            "no-orphan-layout-utilities",
-          ),
-        );
-      }
-    }
-  }
-
-  return results;
-}
-
-// ─── 11. require-flex-for-flex-utilities ─────────────────────────────────────
 
 const FLEX_CONTAINER_CLASSES = [
   "flex-col",
@@ -615,77 +443,6 @@ function checkRequireGridForGridUtilities(
   return results;
 }
 
-// ─── 13. warn-ineffective-z-index ────────────────────────────────────────────
-
-const POSITIONING_CLASSES = new Set(["relative", "absolute", "fixed", "sticky"]);
-
-function checkWarnIneffectiveZIndex(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  for (const { offset, classes } of extractClassLists(text)) {
-    const bases = new Set(classes.map((c) => stripVariants(c)));
-    let hasZIndex = false;
-    for (const b of bases) {
-      if (b.startsWith("z-") && b !== "z-auto") {
-        hasZIndex = true;
-        break;
-      }
-    }
-    if (!hasZIndex) continue;
-    const hasPosition = [...POSITIONING_CLASSES].some((p) => bases.has(p));
-    if (!hasPosition) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          offset,
-          "`z-*` has no effect without `relative`, `absolute`, `fixed`, or `sticky`.",
-          "warn-ineffective-z-index",
-        ),
-      );
-    }
-  }
-  return results;
-}
-
-// ─── 14. require-display-for-sizing ─────────────────────────────────────────
-
-function checkRequireDisplayForSizing(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const elements = extractElements(text);
-  for (const el of elements) {
-    const classStr = el.attrs["className"] ?? el.attrs["class"] ?? "";
-    if (!classStr) continue;
-    const classes = classStr.trim().split(/\s+/).filter(Boolean);
-    const bases = new Set(classes.map((c) => stripVariants(c)));
-
-    let hasSizing = false;
-    for (const b of bases) {
-      if (b.startsWith("w-") || b.startsWith("h-") || b.startsWith("size-")) {
-        hasSizing = true;
-        break;
-      }
-    }
-    if (!hasSizing) continue;
-
-    if (INLINE_TAGS.has(el.tag)) {
-      const hasBlockDisplay =
-        [...DISPLAY_CLASSES].some((d) => bases.has(d)) && !bases.has("inline");
-      if (!hasBlockDisplay) {
-        results.push(
-          diag(
-            filePath,
-            text,
-            el.offset,
-            `\`<${el.tag}>\` is inline by default. Add \`inline-block\` (or another block display) for \`w-*\`/\`h-*\` to take effect.`,
-            "require-display-for-sizing",
-          ),
-        );
-      }
-    }
-  }
-  return results;
-}
-
 // ─── 15. warn-hover-on-disabled ─────────────────────────────────────────────
 
 function checkWarnHoverOnDisabled(text: string, filePath: string): Diagnostic[] {
@@ -712,48 +469,6 @@ function checkWarnHoverOnDisabled(text: string, filePath: string): Diagnostic[] 
           el.offset,
           "Disabled element has `hover:*` variant which will not work. Use `disabled:*` variants instead.",
           "warn-hover-on-disabled",
-        ),
-      );
-    }
-  }
-  return results;
-}
-
-// ─── 16. require-focus-visible-for-interactive ───────────────────────────────
-
-const INTERACTIVE_TAGS = new Set([
-  "button",
-  "a",
-  "input",
-  "select",
-  "textarea",
-  "details",
-  "summary",
-]);
-
-function checkRequireFocusVisibleForInteractive(text: string, filePath: string): Diagnostic[] {
-  const results: Diagnostic[] = [];
-  const elements = extractElements(text);
-  for (const el of elements) {
-    if (!INTERACTIVE_TAGS.has(el.tag)) continue;
-    const classStr = el.attrs["className"] ?? el.attrs["class"] ?? "";
-    if (!classStr) continue;
-    const classes = classStr.trim().split(/\s+/).filter(Boolean);
-    let hasHover = false;
-    let hasFocusVisible = false;
-    for (const c of classes) {
-      const parsed = parseClassName(c);
-      if (parsed.variant === "hover") hasHover = true;
-      if (parsed.variant === "focus-visible") hasFocusVisible = true;
-    }
-    if (hasHover && !hasFocusVisible) {
-      results.push(
-        diag(
-          filePath,
-          text,
-          el.offset,
-          "Interactive element has `hover:*` variant but no `focus-visible:*`. Add keyboard focus styles for accessibility.",
-          "require-focus-visible-for-interactive",
         ),
       );
     }
@@ -815,18 +530,83 @@ function checkWarnIncompleteDarkColorPair(text: string, filePath: string): Diagn
 
 // ─── 18. prefer-theme-scale ─────────────────────────────────────────────────
 
+/** Convert an arbitrary value + unit to a Tailwind spacing-scale index (4px base). */
+function toScaleValue(value: number, unit: string): number {
+  return unit === "px" ? value / 4 : value * 4;
+}
+
+const SPACING_UTILITIES =
+  /^(?:m[trblxyse]?|p[trblxyse]?|gap(?:-[xy])?|space-[xy]|scroll-m[trblxyse]?|scroll-p[trblxyse]?|w|min-w|max-w|h|min-h|max-h|size|basis|inset(?:-[xy])?|start|end|top|right|bottom|left|translate-[xy]|indent)$/;
+
+const DEFAULT_FONT_SIZE_TOKENS = [
+  { pixels: 12, name: "xs" },
+  { pixels: 14, name: "sm" },
+  { pixels: 16, name: "base" },
+  { pixels: 18, name: "lg" },
+  { pixels: 20, name: "xl" },
+  { pixels: 24, name: "2xl" },
+  { pixels: 30, name: "3xl" },
+  { pixels: 36, name: "4xl" },
+  { pixels: 48, name: "5xl" },
+  { pixels: 60, name: "6xl" },
+  { pixels: 72, name: "7xl" },
+  { pixels: 96, name: "8xl" },
+  { pixels: 128, name: "9xl" },
+] as const;
+
+function toPixels(value: number, unit: string): number | undefined {
+  if (unit === "px") return value;
+  if (unit === "rem") return value * 16;
+  return undefined;
+}
+
+function nearestFontSize(pixels: number) {
+  return DEFAULT_FONT_SIZE_TOKENS.reduce((nearest, token) =>
+    Math.abs(token.pixels - pixels) <= Math.abs(nearest.pixels - pixels) ? token : nearest,
+  );
+}
+
 function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
-  const scaleValueRe = /(?:^|\s)([a-z-]+)-\[(\d+)(?:px|rem|em|pt|pc|mm|cm)\]/g;
-  for (const { offset, raw } of extractClassLists(text)) {
-    let match: RegExpExecArray | null;
-    while ((match = scaleValueRe.exec(raw)) !== null) {
+  const arbitraryValueRe = /^([a-z-]+)-\[(\d+(?:\.\d+)?)(px|rem|em|pt|pc|mm|cm)\]$/;
+  for (const { offset, classes } of extractClassLists(text)) {
+    for (const className of classes) {
+      const base = parseClassName(className).base;
+      const match = arbitraryValueRe.exec(base);
+      if (!match) continue;
+
+      const utility = match[1];
+      const value = Number(match[2]);
+      const unit = match[3];
+      const valueWithUnit = `${match[2]}${unit}`;
+      const arbitraryClass = `${utility}-[${valueWithUnit}]`;
+
+      if (utility === "text") {
+        const pixels = toPixels(value, unit);
+        const nearest = pixels === undefined ? undefined : nearestFontSize(pixels);
+        const difference =
+          nearest === undefined || pixels === undefined ? undefined : nearest.pixels - pixels;
+        const customName = pixels === undefined ? "custom" : String(pixels).replace(".", "_");
+        const message =
+          nearest !== undefined && difference === 0
+            ? `\`${arbitraryClass}\` matches built-in \`text-${nearest.name}\` (${nearest.pixels}px). Use \`text-${nearest.name}\`.`
+            : nearest !== undefined && difference !== undefined
+              ? `\`${arbitraryClass}\`: nearest is \`text-${nearest.name}\` (${nearest.pixels}px, ${Math.abs(difference)}px ${difference > 0 ? "larger" : "smaller"}). Exact: add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`
+              : `No built-in token for \`${arbitraryClass}\`. Add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`;
+        results.push(diag(filePath, text, offset, message, "prefer-theme-scale"));
+        continue;
+      }
+
+      if (!SPACING_UTILITIES.test(utility)) continue;
+      if (unit !== "px" && unit !== "rem") continue;
+
+      const themeVal = toScaleValue(value, unit);
       results.push(
         diag(
           filePath,
           text,
           offset,
-          `Prefer Tailwind's design scale over arbitrary value \`${match[1]}-[${match[2]}]\`. Use a theme value like \`${match[1]}-${match[2]}\` if it matches the scale.`,
+          `Prefer Tailwind's spacing scale over \`${arbitraryClass}\`. Use \`${utility}-${themeVal}\` instead.`,
           "prefer-theme-scale",
         ),
       );
@@ -840,18 +620,20 @@ function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
 function checkNoMagicSpacing(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
   const spacingRe =
-    /(?:^|\s)((?:m|p|gap|space-[xy]|scroll-m|scroll-p)[a-z]?)-\[(\d+)(?:px|rem|em)\]/g;
+    /(?:^|\s)((?:m|p|gap|space-[xy]|scroll-m|scroll-p)[a-z]?)-\[(\d+(?:\.\d+)?)(px|rem)\]/g;
   for (const { offset, raw } of extractClassLists(text)) {
     let match: RegExpExecArray | null;
     while ((match = spacingRe.exec(raw)) !== null) {
-      const val = Number(match[2]);
-      if (val > 0 && val % 4 !== 0) {
+      const value = Number(match[2]);
+      const scaleValue = toScaleValue(value, match[3]);
+      if (!Number.isInteger(scaleValue)) {
+        const arbitraryClass = `${match[1]}-[${match[2]}${match[3]}]`;
         results.push(
           diag(
             filePath,
             text,
             offset,
-            `Magic spacing value \`${match[0].trim()}\`. This doesn't match the 4px design grid. Use a theme scale value or \`calc()\`/ \`var()\` for intentional values.`,
+            `Class \`${arbitraryClass}\` can be written as \`${match[1]}-${scaleValue}\`.`,
             "no-magic-spacing",
           ),
         );
@@ -935,12 +717,14 @@ function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
   for (const { offset, raw } of extractClassLists(text)) {
     let match: RegExpExecArray | null;
     while ((match = colorHexRe.exec(raw)) !== null) {
+      const utility = match[1];
+      const color = `#${match[2]}`;
       results.push(
         diag(
           filePath,
           text,
           offset,
-          `Prefer design tokens over raw hex colors: \`${match[0].trim()}\`. Use \`bg-background\`, \`text-foreground\`, or similar project tokens.`,
+          `For \`${match[0].trim()}\`, add \`@theme { --color-custom: ${color}; }\` to global CSS; use \`${utility}-custom\`. Rename \`custom\` for its role.`,
           "prefer-design-tokens",
         ),
       );
@@ -956,11 +740,6 @@ export const ALL_RULES: RuleEntry[] = [
     id: "no-duplicate-utilities",
     check: checkNoDuplicateUtilities,
     description: "Detect repeated identical utilities",
-  },
-  {
-    id: "canonical-class-order",
-    check: checkCanonicalClassOrder,
-    description: "Enforce deterministic utility ordering",
   },
   {
     id: "prefer-truncate-shorthand",
@@ -993,11 +772,6 @@ export const ALL_RULES: RuleEntry[] = [
     description: "Require motion-reduce variant for animations",
   },
   {
-    id: "no-orphan-layout-utilities",
-    check: checkNoOrphanLayoutUtilities,
-    description: "Detect layout utilities without flex/grid",
-  },
-  {
     id: "require-flex-for-flex-utilities",
     check: checkRequireFlexForFlexUtilities,
     description: "Detect flex container utilities without flex",
@@ -1008,24 +782,9 @@ export const ALL_RULES: RuleEntry[] = [
     description: "Detect grid utilities without grid",
   },
   {
-    id: "warn-ineffective-z-index",
-    check: checkWarnIneffectiveZIndex,
-    description: "Detect z-index without positioning",
-  },
-  {
-    id: "require-display-for-sizing",
-    check: checkRequireDisplayForSizing,
-    description: "Detect sizing on inline elements without block display",
-  },
-  {
     id: "warn-hover-on-disabled",
     check: checkWarnHoverOnDisabled,
     description: "Detect hover variants on disabled elements",
-  },
-  {
-    id: "require-focus-visible-for-interactive",
-    check: checkRequireFocusVisibleForInteractive,
-    description: "Require focus-visible styles on interactive elements with hover",
   },
   {
     id: "warn-incomplete-dark-color-pair",

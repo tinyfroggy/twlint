@@ -39,12 +39,6 @@ export const RULE_REGISTRY = [
     diagnosticKind: "cssConflict",
   },
   {
-    id: "recommended-variant-order",
-    bucket: "ls",
-    description: "Enforce the recommended variant order",
-    diagnosticKind: "recommendedVariantOrder",
-  },
-  {
     id: "used-blocklisted-class",
     bucket: "ls",
     description: "Flag usage of blocklisted classes",
@@ -63,11 +57,6 @@ export const RULE_REGISTRY = [
     id: "no-duplicate-utilities",
     bucket: "custom",
     description: "Detect repeated identical utilities",
-  },
-  {
-    id: "canonical-class-order",
-    bucket: "custom",
-    description: "Enforce deterministic utility ordering",
   },
   {
     id: "prefer-truncate-shorthand",
@@ -100,11 +89,6 @@ export const RULE_REGISTRY = [
     description: "Require motion-reduce variant for animations",
   },
   {
-    id: "no-orphan-layout-utilities",
-    bucket: "custom",
-    description: "Detect layout utilities without flex/grid",
-  },
-  {
     id: "require-flex-for-flex-utilities",
     bucket: "custom",
     description: "Detect flex container utilities without flex",
@@ -115,24 +99,9 @@ export const RULE_REGISTRY = [
     description: "Detect grid utilities without grid",
   },
   {
-    id: "warn-ineffective-z-index",
-    bucket: "custom",
-    description: "Detect z-index without positioning",
-  },
-  {
-    id: "require-display-for-sizing",
-    bucket: "custom",
-    description: "Detect sizing on inline elements without block display",
-  },
-  {
     id: "warn-hover-on-disabled",
     bucket: "custom",
     description: "Detect hover variants on disabled elements",
-  },
-  {
-    id: "require-focus-visible-for-interactive",
-    bucket: "custom",
-    description: "Require focus-visible styles on interactive elements with hover",
   },
   {
     id: "warn-incomplete-dark-color-pair",
@@ -165,7 +134,25 @@ export type RuleId = (typeof RULE_REGISTRY)[number]["id"];
 
 export const KNOWN_RULES: RuleId[] = RULE_REGISTRY.map((rule) => rule.id);
 
-export const DEFAULT_RULES: RuleId[] = KNOWN_RULES;
+/**
+ * Default rules enabled with no config.
+ *
+ * Some rules are opt-in because they produce noisy output for common code
+ * patterns or require parent-context analysis that is not yet implemented.
+ *
+ * Opt-in rules (enable via `--rules` or `.twlinter.json`):
+ *   - prefer-logical-properties       (RTL suggestions — not all projects target RTL)
+ *   - require-motion-reduce-for-animation  (AX suggestion — noisy in practice)
+ *   - warn-incomplete-dark-color-pair      (AX suggestion — noisy for every utility)
+ *   - require-grid-for-grid-utilities      (needs parent-context DOM analysis to avoid false positives)
+ */
+export const DEFAULT_RULES: RuleId[] = KNOWN_RULES.filter(
+  (id) =>
+    id !== "prefer-logical-properties" &&
+    id !== "require-motion-reduce-for-animation" &&
+    id !== "warn-incomplete-dark-color-pair" &&
+    id !== "require-grid-for-grid-utilities",
+);
 
 /** Ids of rules handled by @tailwindcss/language-service. */
 export const LS_RULES = new Set<RuleId>(

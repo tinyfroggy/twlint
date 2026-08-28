@@ -14,14 +14,19 @@ import { ALL_RULES } from "../src/custom-rules/index.js";
 const require = createRequire(import.meta.url);
 
 describe("rule registry single source of truth", () => {
-  it("derives KNOWN_RULES and DEFAULT_RULES from the registry in order", () => {
+  it("derives KNOWN_RULES from the registry in order", () => {
     const ids = RULE_REGISTRY.map((r) => r.id);
     expect(KNOWN_RULES).toEqual(ids);
-    expect(DEFAULT_RULES).toEqual(ids);
   });
 
-  it("has all 25 rules", () => {
-    expect(DEFAULT_RULES).toHaveLength(25);
+  it("has 19 rules in the registry and 15 in DEFAULT_RULES", () => {
+    expect(KNOWN_RULES).toHaveLength(19);
+    expect(DEFAULT_RULES).toHaveLength(15);
+    // DEFAULT_RULES excludes noisy opt-in rules
+    expect(DEFAULT_RULES).not.toContain("prefer-logical-properties");
+    expect(DEFAULT_RULES).not.toContain("require-motion-reduce-for-animation");
+    expect(DEFAULT_RULES).not.toContain("warn-incomplete-dark-color-pair");
+    expect(DEFAULT_RULES).not.toContain("require-grid-for-grid-utilities");
   });
 
   it("custom rules in the registry exactly match the check functions in ALL_RULES", () => {
@@ -65,8 +70,7 @@ describe("rule registry single source of truth", () => {
     }
   });
 
-  it("maps the previously-broken rules to the correct diagnostic kinds", () => {
-    expect(RULE_TO_DIAGNOSTIC_KIND["recommended-variant-order"]).toBe("recommendedVariantOrder");
+  it("maps language-service rules to the correct diagnostic kinds", () => {
     expect(RULE_TO_DIAGNOSTIC_KIND["used-blocklisted-class"]).toBe("usedBlocklistedClass");
   });
 });

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
+
 import { Command } from "commander";
 
 import { lintProject } from "./index.js";
@@ -10,6 +12,9 @@ import { applyQuiet, shouldFail } from "./reporters/filter.js";
 import { loadConfig } from "./config/load-config.js";
 
 import type { LintOptions } from "./types.js";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json") as { version: string };
 
 type OutputFormat = "pretty" | "json" | "sarif";
 
@@ -107,7 +112,7 @@ program
       '  twlinter lint "src/**/*.{tsx,html}"',
     ].join("\n"),
   )
-  .version("0.1.2", "-v, --version", "display the version number")
+  .version(version, "-v, --version", "display the version number")
   .option("--verbose", "Show file details per rule and configuration info")
   .option("-c, --config <path>", "Path to config file")
   .option("--rules <rules>", "Comma-separated rule names (overrides config)")

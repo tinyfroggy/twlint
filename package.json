@@ -1,6 +1,6 @@
 {
   "name": "twlinter",
-  "version": "0.1.3",
+  "version": "0.2.1",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {

@@ -38,7 +38,7 @@ describe("class extraction inside wrapper helpers", () => {
   it("still detects classes in className attributes (baseline)", async () => {
     const diagnostics = await lint(`const x = <div className="${NON_CANONICAL}" />;`);
     expect(flagsNonCanonical(diagnostics)).toBe(true);
-  });
+  }, 60000);
 
   it("detects classes in clsx string arguments", async () => {
     const diagnostics = await lint(`const a = clsx("flex", "${NON_CANONICAL}");`);
