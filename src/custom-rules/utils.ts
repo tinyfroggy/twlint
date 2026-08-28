@@ -122,32 +122,6 @@ export function stripVariants(name: string): string {
   return parseClassName(name).base;
 }
 
-export function classNameWithoutImportant(name: string): string {
-  return name.startsWith("!") ? name.slice(1) : name;
-}
-
-export function hasPrefixedClass(
-  classes: string[],
-  prefix: string,
-  excludeVariant?: string,
-): boolean {
-  for (const c of classes) {
-    const parsed = parseClassName(c);
-    if (excludeVariant !== undefined && parsed.variant === excludeVariant) continue;
-    if (parsed.base.startsWith(prefix)) return true;
-  }
-  return false;
-}
-
-export function hasExactBase(classes: string[], base: string, excludeVariant?: string): boolean {
-  for (const c of classes) {
-    const parsed = parseClassName(c);
-    if (excludeVariant !== undefined && parsed.variant === excludeVariant) continue;
-    if (parsed.base === base) return true;
-  }
-  return false;
-}
-
 export type ExtractedElement = {
   tag: string;
   offset: number;
@@ -270,28 +244,3 @@ export function extractApplyBlocks(text: string): ExtractedClassList[] {
   }
   return results;
 }
-
-export const RESPONSIVE_VARIANTS = [
-  "sm",
-  "md",
-  "lg",
-  "xl",
-  "2xl",
-  "3xl",
-  "4xl",
-  "5xl",
-  "6xl",
-  "7xl",
-  "max-sm",
-  "max-md",
-  "max-lg",
-  "max-xl",
-  "max-2xl",
-  "max-3xl",
-  "max-4xl",
-  "max-5xl",
-  "max-6xl",
-  "max-7xl",
-  "min-[",
-  "max-[",
-];

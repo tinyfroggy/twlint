@@ -31,34 +31,8 @@ describe("resolveProjectInputFiles", () => {
         "src/app.tsx",
         'export default function App() { return <div className="flex" /> }',
       );
-      const files = await resolveProjectInputFiles([]);
+      const files = await resolveProjectInputFiles();
       expect(files.length).toBeGreaterThanOrEqual(1);
-      expect(files.some((f) => f.endsWith("app.tsx"))).toBe(true);
-    });
-  });
-
-  it("finds files matching a glob pattern", async () => {
-    await withTempDir(async (dir) => {
-      await createFile(dir, "src/app.tsx", "");
-      await createFile(dir, "src/utils.ts", "");
-      const files = await resolveProjectInputFiles(["src/**/*.tsx"]);
-      expect(files.some((f) => f.endsWith("app.tsx"))).toBe(true);
-      expect(files.some((f) => f.endsWith("utils.ts"))).toBe(false);
-    });
-  });
-
-  it("finds files in a directory", async () => {
-    await withTempDir(async (dir) => {
-      await createFile(dir, "src/app.tsx", "");
-      const files = await resolveProjectInputFiles(["src"]);
-      expect(files.some((f) => f.endsWith("app.tsx"))).toBe(true);
-    });
-  });
-
-  it("resolves dot as current directory", async () => {
-    await withTempDir(async (dir) => {
-      await createFile(dir, "app.tsx", "");
-      const files = await resolveProjectInputFiles(["."]);
       expect(files.some((f) => f.endsWith("app.tsx"))).toBe(true);
     });
   });
@@ -68,7 +42,7 @@ describe("resolveProjectInputFiles", () => {
       await createFile(dir, "src/app.tsx", "");
       await createFile(dir, "node_modules/pkg/index.tsx", "");
       await createFile(dir, ".next/server/app.tsx", "");
-      const files = await resolveProjectInputFiles([dir]);
+      const files = await resolveProjectInputFiles();
       expect(files.some((f) => f.endsWith("src/app.tsx"))).toBe(true);
       expect(files.some((f) => f.includes("node_modules"))).toBe(false);
       expect(files.some((f) => f.includes(".next"))).toBe(false);
@@ -86,7 +60,7 @@ describe("resolveProjectInputFiles", () => {
       await createFile(dir, "public/build/manifest.tsx", "");
       await createFile(dir, "storybook-static/index.html", "");
 
-      const files = await resolveProjectInputFiles([dir]);
+      const files = await resolveProjectInputFiles();
 
       expect(files.some((f) => f.endsWith("app/routes/index.tsx"))).toBe(true);
       expect(files.some((f) => f.includes(".tanstack"))).toBe(false);

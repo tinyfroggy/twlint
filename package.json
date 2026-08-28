@@ -1,6 +1,6 @@
 {
   "name": "twlinter",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {
@@ -47,7 +47,6 @@
   },
   "dependencies": {
     "@tailwindcss/language-service": "^0.16.0",
-    "commander": "^15.0.0",
     "fast-glob": "^3.3.3",
     "tailwindcss": "^4.3.3",
     "vscode-languageserver-textdocument": "^1.0.12"
@@ -60,14 +59,6 @@
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
-  },
-  "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
   },
   "files": [
     "dist"

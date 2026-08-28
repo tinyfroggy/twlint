@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { runCustomRules } from "../src/custom-rules/index.js";
-import { initRegistry, getComponentInfo, isComponentElement } from "../src/component-registry.js";
+import { describe, it, expect } from "vitest";
+import { runCustomRules as runAllCustomRules } from "../src/custom-rules/index.js";
 import {
   extractClassLists,
   extractElementsWithClasses,
@@ -9,10 +8,13 @@ import {
   extractElements,
   INLINE_TAGS,
 } from "../src/custom-rules/utils.js";
+import type { Diagnostic } from "../src/types.js";
 
-beforeEach(() => {
-  initRegistry({}, false);
-});
+function runCustomRules(ruleIds: string[], text: string, filePath: string): Diagnostic[] {
+  return runAllCustomRules(text, filePath).filter((diagnostic) =>
+    ruleIds.includes(diagnostic.rule),
+  );
+}
 
 describe("utils", () => {
   describe("extractClassLists", () => {
@@ -87,31 +89,6 @@ describe("utils", () => {
       expect(result).toHaveLength(1);
       expect(result[0].tag).toBe("Dialog.Footer");
       expect(result[0].isComponent).toBe(true);
-    });
-  });
-
-  describe("component-registry", () => {
-    it("initRegistry sets component info", () => {
-      initRegistry({ DialogFooter: { baseClasses: "flex flex-col" } }, false);
-      expect(getComponentInfo("DialogFooter")?.baseClasses).toBe("flex flex-col");
-    });
-
-    it("isComponentElement detects components by uppercase", () => {
-      expect(isComponentElement("div")).toBe(false);
-      expect(isComponentElement("span")).toBe(false);
-      expect(isComponentElement("DialogFooter")).toBe(true);
-      expect(isComponentElement("Button")).toBe(true);
-    });
-
-    it("returns undefined for unknown component", () => {
-      initRegistry({}, false);
-      expect(getComponentInfo("Unknown")).toBeUndefined();
-    });
-
-    it("merges user components over presets", () => {
-      initRegistry({ Button: { baseClasses: "custom-flex" } }, false);
-      // shadcn preset already has Button, user override wins
-      expect(getComponentInfo("Button")?.baseClasses).toBe("custom-flex");
     });
   });
 
@@ -311,57 +288,6 @@ describe("custom rules", () => {
     });
   });
 
-  describe("prefer-logical-properties", () => {
-    it("detects pl-4", () => {
-      const diags = runCustomRules(
-        ["prefer-logical-properties"],
-        '<div className="pl-4" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("ps-4");
-    });
-
-    it("detects border-l", () => {
-      const diags = runCustomRules(
-        ["prefer-logical-properties"],
-        '<div className="border-l-2" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("border-s-2");
-    });
-
-    it("passes on logical properties", () => {
-      const diags = runCustomRules(
-        ["prefer-logical-properties"],
-        '<div className="ps-4 pe-2" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("require-motion-reduce-for-animation", () => {
-    it("detects animation without motion-reduce", () => {
-      const diags = runCustomRules(
-        ["require-motion-reduce-for-animation"],
-        '<div className="animate-spin" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes with motion-reduce variant", () => {
-      const diags = runCustomRules(
-        ["require-motion-reduce-for-animation"],
-        '<div className="animate-spin motion-reduce:animate-none" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
   describe("require-flex-for-flex-utilities", () => {
     it("detects flex-col without flex", () => {
       const diags = runCustomRules(
@@ -381,8 +307,7 @@ describe("custom rules", () => {
       expect(diags).toHaveLength(0);
     });
 
-    it("passes on known component that provides flex internally", () => {
-      initRegistry({ DialogFooter: { baseClasses: "flex flex-col-reverse" } }, false);
+    it("skips custom components whose internal display is unknown", () => {
       const diags = runCustomRules(
         ["require-flex-for-flex-utilities"],
         '<DialogFooter className="flex-row gap-2" />',
@@ -396,17 +321,6 @@ describe("custom rules", () => {
         ["require-flex-for-flex-utilities"],
         '<Dialog.Footer className="flex-row gap-2" />',
         "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("uses explicit context components without global registry state", () => {
-      initRegistry({}, false);
-      const diags = runCustomRules(
-        ["require-flex-for-flex-utilities"],
-        '<CustomFooter className="flex-row" />',
-        "/test.tsx",
-        { components: { CustomFooter: { baseClasses: "flex flex-col-reverse" } } },
       );
       expect(diags).toHaveLength(0);
     });
@@ -430,29 +344,7 @@ describe("custom rules", () => {
       expect(diags[0].message).toContain("flex-col");
     });
 
-    it("requires component base flex in the same responsive scope", () => {
-      const diags = runCustomRules(
-        ["require-flex-for-flex-utilities"],
-        '<ResponsiveOnly className="flex-col" />',
-        "/test.tsx",
-        { components: { ResponsiveOnly: { baseClasses: "sm:flex" } } },
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("warns on known component that does not provide flex", () => {
-      initRegistry({ StaticBox: { baseClasses: "border p-4" } }, false);
-      const diags = runCustomRules(
-        ["require-flex-for-flex-utilities"],
-        '<StaticBox className="flex-row" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("does not provide it internally");
-    });
-
-    it("skips unknown component without strict mode", () => {
-      initRegistry({}, false);
+    it("skips unknown components", () => {
       const diags = runCustomRules(
         ["require-flex-for-flex-utilities"],
         '<Unknown className="flex-row" />',
@@ -461,143 +353,10 @@ describe("custom rules", () => {
       expect(diags).toHaveLength(0);
     });
 
-    it("warns on unknown component with strict mode", () => {
-      initRegistry({}, true);
-      const diags = runCustomRules(
-        ["require-flex-for-flex-utilities"],
-        '<Unknown className="flex-row" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("Low confidence");
-    });
-
-    it("passes on component with inline-flex in base", () => {
-      initRegistry({ Toolbar: { baseClasses: "inline-flex items-center" } }, false);
+    it("skips components that may provide inline-flex internally", () => {
       const diags = runCustomRules(
         ["require-flex-for-flex-utilities"],
         '<Toolbar className="flex-row" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("require-grid-for-grid-utilities", () => {
-    it("detects grid-cols-3 without grid", () => {
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<div className="grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes with grid present", () => {
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<div className="grid grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("passes on known component that provides grid internally", () => {
-      initRegistry({ GridWrapper: { baseClasses: "grid grid-cols-12" } }, false);
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<GridWrapper className="col-span-6" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("allows base grid to satisfy responsive grid utilities", () => {
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<div className="grid sm:grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("warns when grid only exists in a later responsive scope", () => {
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<div className="sm:grid grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("grid-cols-3");
-    });
-
-    it("warns on known component that does not provide grid", () => {
-      initRegistry({ PlainBox: { baseClasses: "block p-4" } }, false);
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<PlainBox className="grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("does not provide it internally");
-    });
-
-    it("skips unknown component without strict mode", () => {
-      initRegistry({}, false);
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<Unknown className="grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-
-    it("warns on unknown component with strict mode", () => {
-      initRegistry({}, true);
-      const diags = runCustomRules(
-        ["require-grid-for-grid-utilities"],
-        '<Unknown className="grid-cols-3" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-      expect(diags[0].message).toContain("Low confidence");
-    });
-  });
-
-  describe("warn-hover-on-disabled", () => {
-    it("detects hover on disabled button", () => {
-      const diags = runCustomRules(
-        ["warn-hover-on-disabled"],
-        '<button disabled className="hover:bg-blue-600" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes on enabled button with hover", () => {
-      const diags = runCustomRules(
-        ["warn-hover-on-disabled"],
-        '<button className="hover:bg-blue-600" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(0);
-    });
-  });
-
-  describe("warn-incomplete-dark-color-pair", () => {
-    it("detects text-* without dark:text-*", () => {
-      const diags = runCustomRules(
-        ["warn-incomplete-dark-color-pair"],
-        '<div className="text-gray-900 dark:bg-black" />',
-        "/test.tsx",
-      );
-      expect(diags).toHaveLength(1);
-    });
-
-    it("passes with complete dark pair", () => {
-      const diags = runCustomRules(
-        ["warn-incomplete-dark-color-pair"],
-        '<div className="text-gray-900 dark:text-gray-100" />',
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);

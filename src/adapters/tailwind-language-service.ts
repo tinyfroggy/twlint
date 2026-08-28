@@ -5,18 +5,8 @@ import { pathToFileURL } from "node:url";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { loadDesignSystem } from "./tailwind-design-system.js";
-import { normalizeDiagnostic } from "../core/normalize-diagnostic.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
-import {
-  resolveRules,
-  DEFAULT_RULES,
-  LS_RULES,
-  CUSTOM_RULE_IDS,
-  RULE_TO_DIAGNOSTIC_KIND,
-  type RuleId,
-} from "../core/rules.js";
 import { runCustomRules } from "../custom-rules/index.js";
-import type { RuleContext } from "../custom-rules/index.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
@@ -28,7 +18,11 @@ const {
   getDefaultTailwindSettings,
 } = require("@tailwindcss/language-service");
 
-const CUSTOM_RULE_SET: ReadonlySet<string> = CUSTOM_RULE_IDS;
+const DIAGNOSTIC_KINDS = [
+  "suggestCanonicalClasses",
+  "cssConflict",
+  "usedBlocklistedClass",
+] as const;
 
 export async function createValidationState(cssEntry: string) {
   const { dependencyPaths, designSystem } = await loadDesignSystem(cssEntry);
@@ -67,8 +61,6 @@ export async function validateCandidate(
   state: ReturnType<typeof createState>,
   designSystem: unknown,
   candidate: CandidateInput,
-  rules: RuleId[] = DEFAULT_RULES,
-  ruleContext?: RuleContext,
 ): Promise<Diagnostic[]> {
   const document = TextDocument.create(
     pathToFileURL(candidate.file).href,
@@ -76,34 +68,34 @@ export async function validateCandidate(
     1,
     candidate.text,
   );
-  const resolved = resolveRules(rules);
   const diagnostics: Diagnostic[] = [];
 
-  const lsRules = resolved.filter((r) => LS_RULES.has(r));
-  if (lsRules.length > 0) {
+  for (const kind of DIAGNOSTIC_KINDS) {
     try {
-      const kinds = lsRules.map((rule) => RULE_TO_DIAGNOSTIC_KIND[rule]) as unknown[] as Parameters<
-        typeof doValidate
-      >[2];
-      const lsDiagnostics = (await doValidate(state, document, kinds)) as TailwindDiagnostic[];
-      diagnostics.push(...lsDiagnostics.map((raw) => normalizeDiagnostic(raw, candidate.file)));
+      const rawDiagnostics = (await doValidate(state, document, [kind])) as TailwindDiagnostic[];
+      diagnostics.push(
+        ...rawDiagnostics.map((raw) => ({
+          file: path.relative(process.cwd(), candidate.file),
+          line: raw.range.start.line + 1,
+          column: raw.range.start.character + 1,
+          severity: "warning" as const,
+          rule: typeof raw.code === "string" ? raw.code : "suggestCanonicalClasses",
+          message: raw.message,
+          source: "tw",
+        })),
+      );
     } catch {
-      // LS rules failed silently; shorthand-classes and custom rules still run
+      // One unsupported Tailwind check should not hide other diagnostics.
     }
   }
 
-  if (resolved.includes("shorthand-classes")) {
-    try {
-      diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
-    } catch {
-      // shorthand-classes requires the design system; skip if unavailable
-    }
+  try {
+    diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
+  } catch {
+    // The shorthand check requires the Tailwind design system.
   }
 
-  const customRuleIds = resolved.filter((r) => CUSTOM_RULE_SET.has(r));
-  if (customRuleIds.length > 0) {
-    diagnostics.push(...runCustomRules(customRuleIds, candidate.text, candidate.file, ruleContext));
-  }
+  diagnostics.push(...runCustomRules(candidate.text, candidate.file));
 
   return diagnostics;
 }

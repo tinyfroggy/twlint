@@ -1,33 +1,20 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 import os from "node:os";
 
 import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
-import { discoverProject } from "../discovery/discover-project.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
 import { resolveCssEntry } from "../discovery/resolve-css-entry.js";
-import { resolveProjectInputFiles, resolveProjectRoot } from "../discovery/resolve-inputs.js";
-import { DEFAULT_RULES, type RuleId } from "./rules.js";
-import { initRegistry } from "../component-registry.js";
+import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
 
-import type { CandidateInput, Diagnostic, LintOptions, LintResult } from "../types.js";
+import type { CandidateInput, Diagnostic, LintResult } from "../types.js";
 import { MAX_FILE_SIZE_BYTES } from "../constants.js";
 
-export async function lintProject(
-  patterns: string[],
-  options: LintOptions = {},
-): Promise<LintResult> {
+export async function lintProject(): Promise<LintResult> {
   const startedAt = performance.now();
-  const ignorePatterns = options.ignorePatterns ?? [];
-  const classIgnorePatterns = options.classIgnorePatterns ?? [];
-  const rules = options.rules as RuleId[] | undefined;
-  const maxFileSize = options.maxFileSize ?? MAX_FILE_SIZE_BYTES;
-  const rootDir = resolveProjectRoot(patterns);
-  const entries = await resolveProjectInputFiles(patterns, ignorePatterns);
-
-  initRegistry(options.components, options.strict);
+  const rootDir = process.cwd();
+  const entries = await resolveProjectInputFiles();
 
   if (entries.length === 0) {
     return {
@@ -35,26 +22,12 @@ export async function lintProject(
       scannedFiles: 0,
       elapsedMilliseconds: performance.now() - startedAt,
       diagnostics: [],
-      project: await discoverProject(null, rootDir),
     };
   }
 
-  const cssEntry = options.cssEntry
-    ? path.resolve(rootDir, options.cssEntry)
-    : await resolveCssEntry(rootDir);
-  const project = await discoverProject(cssEntry, rootDir);
-  const candidates = await collectCandidateInputs(entries, maxFileSize);
-  let diagnostics = await validateCandidates(
-    cssEntry,
-    candidates,
-    rules,
-    options.strict,
-    options.components,
-  );
-
-  if (classIgnorePatterns.length > 0) {
-    diagnostics = filterIgnoredClasses(diagnostics, classIgnorePatterns);
-  }
+  const cssEntry = await resolveCssEntry(rootDir);
+  const candidates = await collectCandidateInputs(entries);
+  const diagnostics = await validateCandidates(cssEntry, candidates);
 
   diagnostics.sort((a, b) => {
     return a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column;
@@ -65,7 +38,6 @@ export async function lintProject(
     scannedFiles: candidates.length,
     elapsedMilliseconds: performance.now() - startedAt,
     diagnostics,
-    project,
   };
 }
 
@@ -73,17 +45,11 @@ async function safeValidate(
   state: Awaited<ReturnType<typeof createValidationState>>["state"],
   designSystem: unknown,
   candidate: CandidateInput,
-  rules?: RuleId[],
-  strict?: boolean,
-  components?: LintOptions["components"],
 ) {
-  return await validateCandidate(state, designSystem, candidate, rules, { strict, components });
+  return await validateCandidate(state, designSystem, candidate);
 }
 
-async function collectCandidateInputs(
-  files: string[],
-  maxFileSize: number,
-): Promise<CandidateInput[]> {
+async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]> {
   const candidates = await Promise.all(
     files.map(async (file) => {
       let text: string;
@@ -93,7 +59,7 @@ async function collectCandidateInputs(
         return null;
       }
 
-      if (text.length > maxFileSize) return null;
+      if (text.length > MAX_FILE_SIZE_BYTES) return null;
       if (!mightContainTailwindClasses(file, text)) return null;
 
       return { file, text };
@@ -106,9 +72,6 @@ async function collectCandidateInputs(
 async function validateCandidates(
   cssEntry: string,
   candidates: CandidateInput[],
-  rules?: RuleId[],
-  strict?: boolean,
-  components?: LintOptions["components"],
 ): Promise<Diagnostic[]> {
   const numWorkers = Math.min(
     os.availableParallelism?.() ?? os.cpus().length,
@@ -119,9 +82,7 @@ async function validateCandidates(
   if (numWorkers <= 1) {
     const { state, designSystem } = await createValidationState(cssEntry);
     return (
-      await Promise.all(
-        candidates.map((c) => safeValidate(state, designSystem, c, rules, strict, components)),
-      )
+      await Promise.all(candidates.map((candidate) => safeValidate(state, designSystem, candidate)))
     ).flat();
   }
 
@@ -130,12 +91,7 @@ async function validateCandidates(
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
-        workerData: {
-          cssEntry,
-          rules: rules ?? DEFAULT_RULES,
-          strict: strict ?? false,
-          components,
-        },
+        workerData: { cssEntry },
       });
 
       const result = await new Promise<Diagnostic[]>((resolve) => {
@@ -150,15 +106,6 @@ async function validateCandidates(
   );
 
   return results.flat();
-}
-
-function filterIgnoredClasses(diagnostics: Diagnostic[], patterns: string[]): Diagnostic[] {
-  const regexps = patterns.map((p) => new RegExp(p));
-  return diagnostics.filter((d) => {
-    const match = d.message.match(/`([^`]+)`/);
-    if (!match) return true;
-    return !regexps.some((r) => r.test(match[1]));
-  });
 }
 
 function distributeArray<T>(array: T[], n: number): T[][] {
