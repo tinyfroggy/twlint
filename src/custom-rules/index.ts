@@ -7,7 +7,7 @@ import {
   stripVariants,
   parseClassName,
 } from "./utils.js";
-type RuleCheck = (text: string, filePath: string) => Diagnostic[];
+export type RuleCheck = (text: string, filePath: string) => Diagnostic[];
 
 function positionAtOffset(fileText: string, offset: number): { line: number; column: number } {
   const before = fileText.slice(0, offset);
@@ -443,22 +443,27 @@ function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
   return results;
 }
 
-const CUSTOM_RULES: RuleCheck[] = [
-  checkNoDuplicateUtilities,
-  checkPreferTruncateShorthand,
-  checkNoImportantAbuse,
-  checkNoSrOnlyDisplayConflict,
-  checkConsistentNegativeArbitraryValues,
-  checkRequireFlexForFlexUtilities,
-  checkPreferThemeScale,
-  checkNoMagicSpacing,
-  checkDetectConflictsInTemplateLiterals,
-  checkPreferDesignTokens,
-];
+/**
+ * Named registry of the built-in custom rules. The CLI runs every entry
+ * through `runCustomRules`; the ESLint/Oxlint plugin exposes each entry as
+ * its own rule module.
+ */
+export const CUSTOM_RULES: Record<string, RuleCheck> = {
+  "no-duplicate-utilities": checkNoDuplicateUtilities,
+  "prefer-truncate-shorthand": checkPreferTruncateShorthand,
+  "no-important-abuse": checkNoImportantAbuse,
+  "no-sr-only-display-conflict": checkNoSrOnlyDisplayConflict,
+  "consistent-negative-arbitrary-values": checkConsistentNegativeArbitraryValues,
+  "require-flex-for-flex-utilities": checkRequireFlexForFlexUtilities,
+  "prefer-theme-scale": checkPreferThemeScale,
+  "no-magic-spacing": checkNoMagicSpacing,
+  "detect-conflicts-in-template-literals": checkDetectConflictsInTemplateLiterals,
+  "prefer-design-tokens": checkPreferDesignTokens,
+};
 
 export function runCustomRules(text: string, filePath: string): Diagnostic[] {
   const results: Diagnostic[] = [];
-  for (const rule of CUSTOM_RULES) {
+  for (const rule of Object.values(CUSTOM_RULES)) {
     try {
       results.push(...rule(text, filePath));
     } catch {
