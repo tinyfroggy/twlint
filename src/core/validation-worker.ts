@@ -2,14 +2,15 @@ import { parentPort, workerData } from "node:worker_threads";
 
 import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
 
+import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
 import type { Diagnostic } from "../types.js";
 
-const { cssEntry } = workerData as {
-  cssEntry: string;
+const { project } = workerData as {
+  project: TailwindProject;
 };
 
 try {
-  const { state, designSystem } = await createValidationState(cssEntry);
+  const { state, designSystem } = await createValidationState(project);
 
   parentPort!.on("message", async (candidates: Array<{ file: string; text: string }>) => {
     const results = await Promise.all(

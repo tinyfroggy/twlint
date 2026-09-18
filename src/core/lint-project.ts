@@ -5,9 +5,10 @@ import os from "node:os";
 
 import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
-import { resolveCssEntry } from "../discovery/resolve-css-entry.js";
+import { resolveTailwindProject } from "../discovery/resolve-tailwind-project.js";
 import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
 
+import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
 import type { CandidateInput, Diagnostic, LintResult } from "../types.js";
 import { MAX_FILE_SIZE_BYTES } from "../constants.js";
 
@@ -25,9 +26,9 @@ export async function lintProject(): Promise<LintResult> {
     };
   }
 
-  const cssEntry = await resolveCssEntry(rootDir);
+  const project = await resolveTailwindProject(rootDir);
   const candidates = await collectCandidateInputs(entries);
-  const diagnostics = await validateCandidates(cssEntry, candidates);
+  const diagnostics = await validateCandidates(project, candidates);
 
   diagnostics.sort((a, b) => {
     return a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column;
@@ -42,11 +43,10 @@ export async function lintProject(): Promise<LintResult> {
 }
 
 async function safeValidate(
-  state: Awaited<ReturnType<typeof createValidationState>>["state"],
-  designSystem: unknown,
+  validation: Awaited<ReturnType<typeof createValidationState>>,
   candidate: CandidateInput,
 ) {
-  return await validateCandidate(state, designSystem, candidate);
+  return await validateCandidate(validation.state, validation.designSystem, candidate);
 }
 
 async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]> {
@@ -70,7 +70,7 @@ async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]
 }
 
 async function validateCandidates(
-  cssEntry: string,
+  project: TailwindProject,
   candidates: CandidateInput[],
 ): Promise<Diagnostic[]> {
   const numWorkers = Math.min(
@@ -80,9 +80,9 @@ async function validateCandidates(
   );
 
   if (numWorkers <= 1) {
-    const { state, designSystem } = await createValidationState(cssEntry);
+    const validation = await createValidationState(project);
     return (
-      await Promise.all(candidates.map((candidate) => safeValidate(state, designSystem, candidate)))
+      await Promise.all(candidates.map((candidate) => safeValidate(validation, candidate)))
     ).flat();
   }
 
@@ -91,7 +91,7 @@ async function validateCandidates(
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
-        workerData: { cssEntry },
+        workerData: { project },
       });
 
       const result = await new Promise<Diagnostic[]>((resolve) => {

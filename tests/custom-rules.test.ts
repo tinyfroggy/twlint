@@ -8,10 +8,16 @@ import {
   extractElements,
   INLINE_TAGS,
 } from "../src/custom-rules/utils.js";
+import type { CustomRuleOptions } from "../src/custom-rules/index.js";
 import type { Diagnostic } from "../src/types.js";
 
-function runCustomRules(ruleIds: string[], text: string, filePath: string): Diagnostic[] {
-  return runAllCustomRules(text, filePath).filter((diagnostic) =>
+function runCustomRules(
+  ruleIds: string[],
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+): Diagnostic[] {
+  return runAllCustomRules(text, filePath, options).filter((diagnostic) =>
     ruleIds.includes(diagnostic.rule),
   );
 }
@@ -439,6 +445,27 @@ describe("custom rules", () => {
       const diags = runCustomRules(["prefer-theme-scale"], '<div className="mt-4" />', "/test.tsx");
       expect(diags).toHaveLength(0);
     });
+
+    it("skips off-scale suggestions for Tailwind v3", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="w-[350px] mt-[16px]" />',
+        "/test.tsx",
+        { tailwindVersion: 3 },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("mt-4");
+    });
+
+    it("skips the v4 custom-token advice for Tailwind v3", () => {
+      const diags = runCustomRules(
+        ["prefer-theme-scale"],
+        '<div className="text-[13px]" />',
+        "/test.tsx",
+        { tailwindVersion: 3 },
+      );
+      expect(diags).toHaveLength(0);
+    });
   });
 
   describe("no-magic-spacing", () => {
@@ -459,6 +486,25 @@ describe("custom rules", () => {
         "/test.tsx",
       );
       expect(diags).toHaveLength(0);
+    });
+
+    it("only suggests steps that exist on the v3 scale", () => {
+      const offScale = runCustomRules(
+        ["no-magic-spacing"],
+        '<div className="ms-[17px]" />',
+        "/test.tsx",
+        { tailwindVersion: 3 },
+      );
+      expect(offScale).toHaveLength(0);
+
+      const onScale = runCustomRules(
+        ["no-magic-spacing"],
+        '<div className="p-[6px]" />',
+        "/test.tsx",
+        { tailwindVersion: 3 },
+      );
+      expect(onScale).toHaveLength(1);
+      expect(onScale[0].message).toBe("Class `p-[6px]` can be written as `p-1.5`.");
     });
   });
 

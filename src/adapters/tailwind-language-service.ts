@@ -1,22 +1,21 @@
 import path from "node:path";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { loadDesignSystem } from "./tailwind-design-system.js";
+import { createV3ValidationState } from "./tailwind-v3-state.js";
+import {
+  createState,
+  doValidate,
+  getDefaultTailwindSettings,
+} from "./tailwind-language-service-api.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
 import { runCustomRules } from "../custom-rules/index.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
+import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
-
-const require = createRequire(import.meta.url);
-const {
-  createState,
-  doValidate,
-  getDefaultTailwindSettings,
-} = require("@tailwindcss/language-service");
 
 const DIAGNOSTIC_KINDS = [
   "suggestCanonicalClasses",
@@ -24,8 +23,18 @@ const DIAGNOSTIC_KINDS = [
   "usedBlocklistedClass",
 ] as const;
 
-export async function createValidationState(cssEntry: string) {
-  const { dependencyPaths, designSystem } = await loadDesignSystem(cssEntry);
+export async function createValidationState(project: TailwindProject) {
+  if (project.version === 3) {
+    const { state, dependencyPaths } = await createV3ValidationState(project);
+
+    return {
+      dependencyPaths,
+      state,
+      designSystem: undefined as unknown,
+    };
+  }
+
+  const { dependencyPaths, designSystem } = await loadDesignSystem(project.cssEntry);
   const settings = getDefaultTailwindSettings();
 
   // Harden class extraction: by default the language service only scans
@@ -92,10 +101,14 @@ export async function validateCandidate(
   try {
     diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
   } catch {
-    // The shorthand check requires the Tailwind design system.
+    // The shorthand check requires a Tailwind v4 design system.
   }
 
-  diagnostics.push(...runCustomRules(candidate.text, candidate.file));
+  diagnostics.push(
+    ...runCustomRules(candidate.text, candidate.file, {
+      tailwindVersion: state?.v4 === false ? 3 : 4,
+    }),
+  );
 
   return diagnostics;
 }
