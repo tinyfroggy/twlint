@@ -27,6 +27,7 @@ The CLI is a project scanner around Tailwind's language tooling plus a small cus
 ```txt
 src/
   cli.ts                         Commander entrypoint
+  plugin.ts                      ESLint/Oxlint plugin entrypoint
   core/lint-project.ts           File discovery, worker orchestration, result sorting
   core/validation-worker.ts      Parallel validation worker
   adapters/                      Tailwind language service and design-system adapters
@@ -79,10 +80,8 @@ Use `ParsedClass.responsive` and `hasBaseInScope` when checking whether a depend
 ## Adding A Rule
 
 1. Add the rule implementation in `src/custom-rules/index.ts` or a focused helper module if the rule needs shared logic.
-2. Register it in `ALL_RULES`.
-3. Add the rule id to `src/core/rules.ts` if it should be selectable from config/CLI.
-4. Add tests in `tests/custom-rules.test.ts`.
-5. Update the README rule table if the rule is user-facing.
+2. Register it in the `CUSTOM_RULES` registry. The CLI runs every entry; `src/plugin.ts` exposes each entry to ESLint/Oxlint automatically.
+3. Add tests in `tests/custom-rules.test.ts`, and cover the plugin adapter in `tests/plugin.test.ts` when the shape changes.
 
 For element-aware rules, prefer `extractElementsWithClasses` over raw regexes. It supports native tags, component tags, and JSX member tags such as `Dialog.Footer`.
 
