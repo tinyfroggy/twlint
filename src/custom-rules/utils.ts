@@ -94,6 +94,243 @@ export function extractClassLists(text: string): ExtractedClassList[] {
   return results;
 }
 
+/**
+ * Class-helper functions whose string arguments are class lists. `cva` and
+ * `tv` are intentionally absent: their objects mix variant names and values,
+ * so a text scan cannot tell a class from a variant name.
+ */
+const CLASS_HELPER_FUNCTIONS = new Set([
+  "cn",
+  "clsx",
+  "cx",
+  "classnames",
+  "classNames",
+  "twMerge",
+  "twJoin",
+  "tw",
+]);
+
+/**
+ * Extract class lists from `cn("...")`-style helper calls. Collects string and
+ * template-literal static segments at the helper's own argument level, and
+ * skips literals nested inside other calls so `cn(format("yyyy-MM-dd"), "p-4")`
+ * only yields class-looking strings.
+ */
+export function extractHelperClassLists(text: string): ExtractedClassList[] {
+  const results: ExtractedClassList[] = [];
+  const callRe = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = callRe.exec(text)) !== null) {
+    if (!CLASS_HELPER_FUNCTIONS.has(match[1])) continue;
+
+    const openParen = match.index + match[0].length - 1;
+    const closeParen = findMatchingParen(text, openParen);
+    if (closeParen === -1) continue;
+
+    const classes = extractArgumentClasses(text, openParen + 1, closeParen);
+    if (classes.length > 0) {
+      results.push({ offset: match.index, classes, raw: classes.join(" ") });
+    }
+
+    // Resume just after the opening paren so nested helper calls are visited.
+    callRe.lastIndex = openParen + 1;
+  }
+
+  return results;
+}
+
+function findMatchingParen(text: string, openParen: number): number {
+  let depth = 0;
+
+  for (let i = openParen; i < text.length; i++) {
+    const char = text[i];
+
+    if (char === '"' || char === "'") {
+      i = readQuoted(text, i).next - 1;
+      continue;
+    }
+
+    if (char === "`") {
+      i = readTemplate(text, i).next - 1;
+      continue;
+    }
+
+    if (char === "/" && text[i + 1] === "/") {
+      i = skipLineComment(text, i) - 1;
+      continue;
+    }
+
+    if (char === "/" && text[i + 1] === "*") {
+      i = skipBlockComment(text, i) - 1;
+      continue;
+    }
+
+    if (char === "(") {
+      depth++;
+    } else if (char === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+
+  return -1;
+}
+
+function extractArgumentClasses(text: string, start: number, end: number): string[] {
+  const classes: string[] = [];
+  const stack: string[] = [];
+  let i = start;
+
+  while (i < end) {
+    const char = text[i];
+
+    if (char === '"' || char === "'") {
+      const literal = readQuoted(text, i, end);
+      if (!stack.includes("(") && !isComparisonOperand(text, i)) pushTokens(classes, literal.value);
+      i = literal.next;
+      continue;
+    }
+
+    if (char === "`") {
+      const literal = readTemplate(text, i, end);
+      if (!stack.includes("(") && !isComparisonOperand(text, i)) pushTokens(classes, literal.value);
+      i = literal.next;
+      continue;
+    }
+
+    if (char === "/" && text[i + 1] === "/") {
+      i = skipLineComment(text, i, end);
+      continue;
+    }
+
+    if (char === "/" && text[i + 1] === "*") {
+      i = skipBlockComment(text, i, end);
+      continue;
+    }
+
+    if (char === "(" || char === "[" || char === "{") {
+      stack.push(char);
+      i++;
+      continue;
+    }
+
+    if (char === ")" || char === "]" || char === "}") {
+      stack.pop();
+      i++;
+      continue;
+    }
+
+    i++;
+  }
+
+  return classes;
+}
+
+/**
+ * True when a literal is the right-hand side of a comparison, as in
+ * `tone === "destructive"`, where the string is a value, not a class.
+ */
+function isComparisonOperand(text: string, start: number): boolean {
+  let i = start - 1;
+  while (i >= 0 && /\s/.test(text[i])) i--;
+
+  let operator = "";
+  while (i >= 0 && /[=!<>]/.test(text[i])) {
+    operator = text[i] + operator;
+    i--;
+  }
+
+  return operator === "==" || operator === "===" || operator === "!=" || operator === "!==";
+}
+
+function pushTokens(target: string[], value: string): void {
+  for (const token of value.split(/\s+/)) {
+    if (token) target.push(token);
+  }
+}
+
+function readQuoted(
+  text: string,
+  start: number,
+  end = text.length,
+): { value: string; next: number } {
+  const quote = text[start];
+  let value = "";
+  let i = start + 1;
+
+  while (i < end) {
+    const char = text[i];
+    if (char === "\\") {
+      value += text[i + 1] ?? "";
+      i += 2;
+      continue;
+    }
+    if (char === quote) return { value, next: i + 1 };
+    value += char;
+    i++;
+  }
+
+  return { value, next: i };
+}
+
+function readTemplate(
+  text: string,
+  start: number,
+  end = text.length,
+): { value: string; next: number } {
+  let value = "";
+  let i = start + 1;
+
+  while (i < end) {
+    const char = text[i];
+    if (char === "\\") {
+      value += text[i + 1] ?? "";
+      i += 2;
+      continue;
+    }
+    if (char === "`") return { value, next: i + 1 };
+
+    if (char === "$" && text[i + 1] === "{") {
+      value += " ";
+      let depth = 1;
+      i += 2;
+      while (i < end && depth > 0) {
+        const inner = text[i];
+        if (inner === '"' || inner === "'") {
+          i = readQuoted(text, i, end).next;
+          continue;
+        }
+        if (inner === "`") {
+          i = readTemplate(text, i, end).next;
+          continue;
+        }
+        if (inner === "{") depth++;
+        if (inner === "}") depth--;
+        i++;
+      }
+      continue;
+    }
+
+    value += char;
+    i++;
+  }
+
+  return { value, next: i };
+}
+
+function skipLineComment(text: string, start: number, end = text.length): number {
+  let i = start;
+  while (i < end && text[i] !== "\n") i++;
+  return i;
+}
+
+function skipBlockComment(text: string, start: number, end = text.length): number {
+  let i = start + 2;
+  while (i < end && !(text[i] === "*" && text[i + 1] === "/")) i++;
+  return Math.min(i + 2, end);
+}
+
 export function parseClassName(name: string): ParsedClass {
   let remaining = name;
   const important = remaining.startsWith("!");

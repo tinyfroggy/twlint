@@ -100,6 +100,23 @@ describe("Tailwind v3 validation", () => {
     expect(diagnostics.some((d) => d.rule === "no-duplicate-utilities")).toBe(true);
   });
 
+  it("reports unknown classes through the v3 JIT context", async () => {
+    const project = await resolveTailwindProject(projectDir);
+    const { state, designSystem } = await createValidationState(project);
+
+    const diagnostics = await validateCandidate(state, designSystem, {
+      file: path.join(projectDir, "src", "component.tsx"),
+      text: `const x = <div className="flex flex-cols rounded-huge" />;`,
+    });
+
+    const messages = diagnostics
+      .filter((d) => d.rule === "no-unknown-classes")
+      .map((d) => d.message)
+      .join("\n");
+    expect(messages).toContain("flex-cols");
+    expect(messages).toContain("rounded-huge");
+  });
+
   it("does not suggest v4-only dynamic spacing values", async () => {
     const project = await resolveTailwindProject(projectDir);
     const { state, designSystem } = await createValidationState(project);
