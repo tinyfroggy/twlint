@@ -7,7 +7,16 @@ import {
   stripVariants,
   parseClassName,
 } from "./utils.js";
-export type RuleCheck = (text: string, filePath: string) => Diagnostic[];
+
+export type CustomRuleOptions = {
+  tailwindVersion?: 3 | 4;
+};
+
+export type RuleCheck = (
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+) => Diagnostic[];
 
 function positionAtOffset(fileText: string, offset: number): { line: number; column: number } {
   const before = fileText.slice(0, offset);
@@ -245,6 +254,23 @@ function toScaleValue(value: number, unit: string): number {
   return unit === "px" ? value / 4 : value * 4;
 }
 
+/**
+ * The default Tailwind v3 spacing scale. v3 only ships these named steps, so
+ * values that resolve off the scale (e.g. `w-[350px]` -> `w-87.5`) have no
+ * valid v3 shorthand even though v4 accepts them.
+ */
+const V3_SPACING_SCALE = new Set([
+  0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44,
+  48, 52, 56, 60, 64, 72, 80, 96,
+]);
+
+function isV3SpacingValue(value: number, unit: string): boolean {
+  if (unit === "px" && value === 1) {
+    return true;
+  }
+  return V3_SPACING_SCALE.has(toScaleValue(value, unit));
+}
+
 const SPACING_UTILITIES =
   /^(?:m[trblxyse]?|p[trblxyse]?|gap(?:-[xy])?|space-[xy]|scroll-m[trblxyse]?|scroll-p[trblxyse]?|w|min-w|max-w|h|min-h|max-h|size|basis|inset(?:-[xy])?|start|end|top|right|bottom|left|translate-[xy]|indent)$/;
 
@@ -276,7 +302,12 @@ function nearestFontSize(pixels: number) {
   );
 }
 
-function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
+function checkPreferThemeScale(
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+): Diagnostic[] {
+  const version = options?.tailwindVersion ?? 4;
   const results: Diagnostic[] = [];
   const arbitraryValueRe = /^([a-z-]+)-\[(\d+(?:\.\d+)?)(px|rem|em|pt|pc|mm|cm)\]$/;
   for (const { offset, classes } of extractClassLists(text)) {
@@ -296,21 +327,37 @@ function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
         const nearest = pixels === undefined ? undefined : nearestFontSize(pixels);
         const difference =
           nearest === undefined || pixels === undefined ? undefined : nearest.pixels - pixels;
+
+        if (nearest !== undefined && difference === 0) {
+          results.push(
+            diag(
+              filePath,
+              text,
+              offset,
+              `\`${arbitraryClass}\` matches built-in \`text-${nearest.name}\` (${nearest.pixels}px). Use \`text-${nearest.name}\`.`,
+              "prefer-theme-scale",
+            ),
+          );
+          continue;
+        }
+
+        if (version === 3) continue;
+
         const customName = pixels === undefined ? "custom" : String(pixels).replace(".", "_");
         const message =
-          nearest !== undefined && difference === 0
-            ? `\`${arbitraryClass}\` matches built-in \`text-${nearest.name}\` (${nearest.pixels}px). Use \`text-${nearest.name}\`.`
-            : nearest !== undefined && difference !== undefined
-              ? `\`${arbitraryClass}\`: nearest is \`text-${nearest.name}\` (${nearest.pixels}px, ${Math.abs(difference)}px ${difference > 0 ? "larger" : "smaller"}). Exact: add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`
-              : `No built-in token for \`${arbitraryClass}\`. Add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`;
+          nearest !== undefined && difference !== undefined
+            ? `\`${arbitraryClass}\`: nearest is \`text-${nearest.name}\` (${nearest.pixels}px, ${Math.abs(difference)}px ${difference > 0 ? "larger" : "smaller"}). Exact: add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`
+            : `No built-in token for \`${arbitraryClass}\`. Add \`@theme { --text-${customName}: ${valueWithUnit}; }\` to global CSS; use \`text-${customName}\`.`;
         results.push(diag(filePath, text, offset, message, "prefer-theme-scale"));
         continue;
       }
 
       if (!SPACING_UTILITIES.test(utility)) continue;
       if (unit !== "px" && unit !== "rem") continue;
+      if (version === 3 && !isV3SpacingValue(value, unit)) continue;
 
-      const themeVal = toScaleValue(value, unit);
+      const themeVal =
+        version === 3 && unit === "px" && value === 1 ? "px" : toScaleValue(value, unit);
       results.push(
         diag(
           filePath,
@@ -327,7 +374,12 @@ function checkPreferThemeScale(text: string, filePath: string): Diagnostic[] {
 
 // ─── no-magic-spacing ───────────────────────────────────────────────────────
 
-function checkNoMagicSpacing(text: string, filePath: string): Diagnostic[] {
+function checkNoMagicSpacing(
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+): Diagnostic[] {
+  const version = options?.tailwindVersion ?? 4;
   const results: Diagnostic[] = [];
   const spacingRe =
     /(?:^|\s)((?:m|p|gap|space-[xy]|scroll-m|scroll-p)[a-z]?)-\[(\d+(?:\.\d+)?)(px|rem)\]/g;
@@ -335,19 +387,25 @@ function checkNoMagicSpacing(text: string, filePath: string): Diagnostic[] {
     let match: RegExpExecArray | null;
     while ((match = spacingRe.exec(raw)) !== null) {
       const value = Number(match[2]);
-      const scaleValue = toScaleValue(value, match[3]);
-      if (!Number.isInteger(scaleValue)) {
-        const arbitraryClass = `${match[1]}-[${match[2]}${match[3]}]`;
-        results.push(
-          diag(
-            filePath,
-            text,
-            offset,
-            `Class \`${arbitraryClass}\` can be written as \`${match[1]}-${scaleValue}\`.`,
-            "no-magic-spacing",
-          ),
-        );
-      }
+      const unit = match[3];
+      const scaleValue = toScaleValue(value, unit);
+      if (Number.isInteger(scaleValue)) continue;
+      if (version === 3 && !isV3SpacingValue(value, unit)) continue;
+
+      const arbitraryClass = `${match[1]}-[${value}${unit}]`;
+      const suggestion =
+        version === 3 && unit === "px" && value === 1
+          ? `${match[1]}-px`
+          : `${match[1]}-${scaleValue}`;
+      results.push(
+        diag(
+          filePath,
+          text,
+          offset,
+          `Class \`${arbitraryClass}\` can be written as \`${suggestion}\`.`,
+          "no-magic-spacing",
+        ),
+      );
     }
   }
   return results;
@@ -461,11 +519,15 @@ export const CUSTOM_RULES: Record<string, RuleCheck> = {
   "prefer-design-tokens": checkPreferDesignTokens,
 };
 
-export function runCustomRules(text: string, filePath: string): Diagnostic[] {
+export function runCustomRules(
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+): Diagnostic[] {
   const results: Diagnostic[] = [];
   for (const rule of Object.values(CUSTOM_RULES)) {
     try {
-      results.push(...rule(text, filePath));
+      results.push(...rule(text, filePath, options));
     } catch {
       // One failing check should not hide other diagnostics.
     }

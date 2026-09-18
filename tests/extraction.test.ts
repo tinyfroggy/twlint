@@ -8,6 +8,7 @@ import {
 import type { Diagnostic } from "../src/types.js";
 
 const CSS_ENTRY = path.resolve(import.meta.dirname, "fixtures", "tw-v4-app", "src", "app.css");
+const PROJECT = { version: 4, rootDir: process.cwd(), cssEntry: CSS_ENTRY } as const;
 
 // `w-[100%]` canonicalizes to `w-full`, so the `canonical-classes` rule fires
 // on it. We use it as a probe: if the diagnostic appears, the class string was
@@ -19,7 +20,7 @@ let state: Awaited<ReturnType<typeof createValidationState>>["state"];
 let designSystem: Awaited<ReturnType<typeof createValidationState>>["designSystem"];
 
 beforeAll(async () => {
-  ({ state, designSystem } = await createValidationState(CSS_ENTRY));
+  ({ state, designSystem } = await createValidationState(PROJECT));
 });
 
 async function lint(text: string): Promise<Diagnostic[]> {

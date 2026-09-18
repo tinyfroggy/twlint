@@ -1,6 +1,6 @@
 # twlinter
 
-A zero-config Tailwind CSS linter for Tailwind v4 projects.
+A zero-config Tailwind CSS linter for Tailwind CSS v3 and v4 projects.
 
 ## Quickstart
 
@@ -27,6 +27,11 @@ That scans the current project and prints the default terminal report. For the s
 npx twlinter@latest --json
 ```
 
+twlinter detects the Tailwind CSS version from the project's installed
+`tailwindcss` package. v4 projects are read from a CSS entry that imports
+`tailwindcss`; v3 projects are read from `tailwind.config.*` (or the v3
+defaults when there is no config file).
+
 ## Rules
 
 Custom rules run in both the CLI and the [Oxlint/ESLint plugin](#oxlint-plugin):
@@ -52,6 +57,13 @@ The CLI also runs Tailwind's language service, which needs the design system:
 | `shorthand-classes` | Class lists that collapse to fewer utilities, e.g. the `truncate` set. |
 | `cssConflict` | Conflicting utilities such as `block` and `hidden`. |
 | `usedBlocklistedClass` | Classes blocked by the Tailwind configuration. |
+
+`cssConflict` runs on both v3 and v4. `suggestCanonicalClasses`,
+`shorthand-classes`, and `usedBlocklistedClass` rely on the v4 design system
+and are skipped on v3. Every [custom rule](#rules) above runs on both versions.
+When the CLI detects v3, the spacing-scale rules only suggest class names that
+exist on the v3 scale; the [plugin](#oxlint-plugin) has no project context and
+keeps v4 behavior.
 
 ## Oxlint plugin
 

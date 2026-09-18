@@ -1,6 +1,6 @@
 {
   "name": "twlinter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {
@@ -72,6 +72,7 @@
     "husky": "^9.1.7",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",
+    "tailwindcss-v3": "npm:tailwindcss@^3.4.19",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"

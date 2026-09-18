@@ -10,13 +10,16 @@ changes.
 ## Inspect the project
 
 - Detect the package manager from the project metadata and lockfile.
-- Confirm this is a Tailwind v4 project: `tailwindcss` v4 is a dependency,
-  and the CSS entry point imports Tailwind (`@import "tailwindcss"`).
-- Note the source directories and the CSS entry point. `twlinter` finds both
-  on its own.
+- Confirm this is a Tailwind CSS v3 or v4 project:
+  - v4: `tailwindcss` v4 is a dependency, and the CSS entry point imports
+    Tailwind (`@import "tailwindcss"`).
+  - v3: `tailwindcss` v3 is a dependency, with `tailwind.config.*` or the v3
+    defaults when there is no config file.
+- Note the source directories and the CSS entry point or config file.
+  `twlinter` finds these on its own.
 
-If the project uses Tailwind v3 or an older setup, stop and tell the user that
-`twlinter` targets Tailwind v4.
+If `tailwindcss` is older than v3, stop and tell the user that `twlinter`
+supports Tailwind CSS v3 and v4.
 
 ## Run twlinter
 
@@ -52,8 +55,11 @@ manager that owns the lint config, and preserve existing rules, parsers, and
 ignores.
 
 The plugin covers the custom rules. The CLI also runs Tailwind's language
-service for canonical-class and CSS-conflict checks. Those need the design
-system, so keep `npx twlinter@latest` in the workflow when they matter.
+service for canonical-class, shorthand, blocklist, and CSS-conflict checks.
+Those need the Tailwind design system, so keep `npx twlinter@latest` in the
+workflow when they matter. On Tailwind v3, the canonical-class, shorthand, and
+blocklist checks are skipped; the CSS-conflict check and every custom rule
+still run.
 
 ## Optional: keep it in the project
 
