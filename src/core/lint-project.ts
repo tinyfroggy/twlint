@@ -46,7 +46,12 @@ async function safeValidate(
   validation: Awaited<ReturnType<typeof createValidationState>>,
   candidate: CandidateInput,
 ) {
-  return await validateCandidate(validation.state, validation.designSystem, candidate);
+  return await validateCandidate(
+    validation.state,
+    validation.designSystem,
+    candidate,
+    validation.dependencyPaths,
+  );
 }
 
 async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]> {

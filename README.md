@@ -57,10 +57,17 @@ The CLI also runs Tailwind's language service, which needs the design system:
 | `shorthand-classes` | Class lists that collapse to fewer utilities, e.g. the `truncate` set. |
 | `cssConflict` | Conflicting utilities such as `block` and `hidden`. |
 | `usedBlocklistedClass` | Classes blocked by the Tailwind configuration. |
+| `no-unknown-classes` | Classes Tailwind cannot generate, such as `rounded-huge`, with spelling suggestions. |
 
-`cssConflict` runs on both v3 and v4. `suggestCanonicalClasses`,
-`shorthand-classes`, and `usedBlocklistedClass` rely on the v4 design system
-and are skipped on v3. Every [custom rule](#rules) above runs on both versions.
+`cssConflict` and `no-unknown-classes` run on both v3 and v4.
+`suggestCanonicalClasses`, `shorthand-classes`, and `usedBlocklistedClass`
+rely on the v4 design system and are skipped on v3.
+`no-unknown-classes` reads classes on elements and in `cn`-style helpers
+(`cn`, `clsx`, `cx`, `classnames`, `twMerge`, `twJoin`, `tw`). It accepts
+Tailwind utilities, `@utility` names, and plain class selectors from the
+theme's CSS import graph, and reports anything else with a spelling
+suggestion when one is close.
+Every [custom rule](#rules) above runs on both versions.
 When the CLI detects v3, the spacing-scale rules only suggest class names that
 exist on the v3 scale; the [plugin](#oxlint-plugin) has no project context and
 keeps v4 behavior.

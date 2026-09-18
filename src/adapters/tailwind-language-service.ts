@@ -11,6 +11,7 @@ import {
   getDefaultTailwindSettings,
 } from "./tailwind-language-service-api.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
+import { getUnknownClassDiagnostics } from "../core/unknown-classes.js";
 import { runCustomRules } from "../custom-rules/index.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
@@ -70,6 +71,7 @@ export async function validateCandidate(
   state: ReturnType<typeof createState>,
   designSystem: unknown,
   candidate: CandidateInput,
+  dependencyPaths?: Iterable<string>,
 ): Promise<Diagnostic[]> {
   const document = TextDocument.create(
     pathToFileURL(candidate.file).href,
@@ -102,6 +104,16 @@ export async function validateCandidate(
     diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
   } catch {
     // The shorthand check requires a Tailwind v4 design system.
+  }
+
+  try {
+    diagnostics.push(
+      ...getUnknownClassDiagnostics(state, designSystem, document, candidate.file, {
+        dependencyPaths,
+      }),
+    );
+  } catch {
+    // The existence check requires a Tailwind design system or v3 JIT context.
   }
 
   diagnostics.push(
