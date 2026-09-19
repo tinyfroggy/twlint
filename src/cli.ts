@@ -9,11 +9,12 @@ import { renderJson } from "./reporters/json.js";
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
-const HELP = `Usage: twlinter [.] [--json]
+const HELP = `Usage: twlinter [.] [--json] [--fix]
 
 Scan the current project for Tailwind CSS issues.
 
 Options:
+  --fix         Apply fixes for problems that can be fixed
   --json        Print the report as JSON
   -h, --help    Show this help
   -v, --version Show the version`;
@@ -29,12 +30,12 @@ async function main(args: string[]): Promise<void> {
     return;
   }
 
-  const unknown = args.find((arg) => arg !== "." && arg !== "--json");
+  const unknown = args.find((arg) => arg !== "." && arg !== "--json" && arg !== "--fix");
   if (unknown) {
     throw new Error(`Unknown option: ${unknown}\n\n${HELP}`);
   }
 
-  const result = await lintProject();
+  const result = await lintProject({ fix: args.includes("--fix") });
   console.log(args.includes("--json") ? renderJson(result) : renderPretty(result));
 
   if (result.diagnostics.length > 0) {

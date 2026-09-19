@@ -130,4 +130,46 @@ describe("Tailwind v3 validation", () => {
     expect(scale).toHaveLength(1);
     expect(scale[0].message).toContain("mt-4");
   });
+
+  it("reads v3 theme colors for no-raw-colors", async () => {
+    const project = await resolveTailwindProject(projectDir);
+    const { state, designSystem, theme } = await createValidationState(project);
+
+    expect(theme?.colors.has("brand")).toBe(true);
+
+    const diagnostics = await validateCandidate(
+      state,
+      designSystem,
+      {
+        file: path.join(projectDir, "src", "component.tsx"),
+        text: `const x = <div className="bg-red-500 bg-brand" />;`,
+      },
+      undefined,
+      theme,
+    );
+
+    const raw = diagnostics.filter((d) => d.rule === "no-raw-colors");
+    expect(raw).toHaveLength(1);
+    expect(raw[0].message).toContain("bg-red-500");
+  });
+
+  it("reports undeclared color tokens on v3 too", async () => {
+    const project = await resolveTailwindProject(projectDir);
+    const { state, designSystem, theme } = await createValidationState(project);
+
+    const diagnostics = await validateCandidate(
+      state,
+      designSystem,
+      {
+        file: path.join(projectDir, "src", "component.tsx"),
+        text: `const x = <div className="bg-totally-unknown" />;`,
+      },
+      undefined,
+      theme,
+    );
+
+    const raw = diagnostics.filter((d) => d.rule === "no-raw-colors");
+    expect(raw).toHaveLength(1);
+    expect(raw[0].message).toContain("not a declared theme color");
+  });
 });

@@ -72,6 +72,8 @@ const CLASS_PATTERNS = [
   /(?:className|class)\s*=\s*'([^']*)'/g,
   /(?:className|class)\s*=\s*\{'([^']*)'\}/g,
   /(?:className|class)\s*=\s*\{"([^"]*)"\}/g,
+  /class:list\s*=\s*"([^"]*)"/g,
+  /class:list\s*=\s*'([^']*)'/g,
   /@apply\s+([^;]+)/g,
 ];
 
@@ -111,18 +113,28 @@ const CLASS_HELPER_FUNCTIONS = new Set([
 ]);
 
 /**
+ * Variant helpers whose string values are classes. `cva`/`tv` objects also
+ * carry quoted variant values such as `"sm"`, so only rules that judge a
+ * class by shape (not existence) should scan them.
+ */
+export const VARIANT_CLASS_FUNCTIONS = new Set([...CLASS_HELPER_FUNCTIONS, "cva", "tv"]);
+
+/**
  * Extract class lists from `cn("...")`-style helper calls. Collects string and
  * template-literal static segments at the helper's own argument level, and
  * skips literals nested inside other calls so `cn(format("yyyy-MM-dd"), "p-4")`
  * only yields class-looking strings.
  */
-export function extractHelperClassLists(text: string): ExtractedClassList[] {
+export function extractHelperClassLists(
+  text: string,
+  functions: Set<string> = CLASS_HELPER_FUNCTIONS,
+): ExtractedClassList[] {
   const results: ExtractedClassList[] = [];
   const callRe = /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(/g;
   let match: RegExpExecArray | null;
 
   while ((match = callRe.exec(text)) !== null) {
-    if (!CLASS_HELPER_FUNCTIONS.has(match[1])) continue;
+    if (!functions.has(match[1])) continue;
 
     const openParen = match.index + match[0].length - 1;
     const closeParen = findMatchingParen(text, openParen);
@@ -480,4 +492,51 @@ export function extractApplyBlocks(text: string): ExtractedClassList[] {
     results.push({ offset: match.index, classes, raw: trimmed });
   }
   return results;
+}
+
+/**
+ * Every string and template literal in the file, as candidate class lists.
+ * Used by `scanAllStrings`, which checks strings that are not recognized
+ * class sites; comments are skipped and template expressions drop out.
+ */
+export function extractStringLiterals(text: string): ExtractedClassList[] {
+  const results: ExtractedClassList[] = [];
+  let i = 0;
+
+  while (i < text.length) {
+    const char = text[i];
+
+    if (char === "/" && text[i + 1] === "/") {
+      i = skipLineComment(text, i);
+      continue;
+    }
+    if (char === "/" && text[i + 1] === "*") {
+      i = skipBlockComment(text, i);
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      const literal = readQuoted(text, i);
+      pushCandidate(results, i, literal.value);
+      i = literal.next;
+      continue;
+    }
+    if (char === "`") {
+      const literal = readTemplate(text, i);
+      pushCandidate(results, i, literal.value);
+      i = literal.next;
+      continue;
+    }
+
+    i++;
+  }
+
+  return results;
+}
+
+function pushCandidate(results: ExtractedClassList[], offset: number, value: string): void {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  const classes = trimmed.split(/\s+/).filter(Boolean);
+  if (classes.length === 0) return;
+  results.push({ offset, classes, raw: trimmed });
 }

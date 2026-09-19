@@ -10,13 +10,13 @@ const { project } = workerData as {
 };
 
 try {
-  const { state, designSystem, dependencyPaths } = await createValidationState(project);
+  const { state, designSystem, dependencyPaths, theme } = await createValidationState(project);
 
   parentPort!.on("message", async (candidates: Array<{ file: string; text: string }>) => {
     const results = await Promise.all(
       candidates.map(async (candidate) => {
         try {
-          return await validateCandidate(state, designSystem, candidate, dependencyPaths);
+          return await validateCandidate(state, designSystem, candidate, dependencyPaths, theme);
         } catch {
           process.stderr.write(`tw: skipping ${candidate.file} (language service error)\n`);
           return [] as Diagnostic[];
