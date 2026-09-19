@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { Diagnostic } from "../types.js";
@@ -51,10 +51,33 @@ export async function applyFixes(diagnostics: Diagnostic[]): Promise<number> {
     result += original.slice(cursor);
 
     if (result !== original) {
-      await writeFile(file, result);
+      await writeFileAtomically(file, result);
       changed++;
     }
   }
 
   return changed;
+}
+
+/**
+ * Replace a file by writing a sibling temp file and renaming it into place, so
+ * a crash mid-write cannot leave a truncated source file behind. The original
+ * file's permissions are preserved.
+ */
+async function writeFileAtomically(file: string, contents: string): Promise<void> {
+  const directory = path.dirname(file);
+  const temp = path.join(
+    directory,
+    `.${path.basename(file)}.twlinter-${process.pid}-${Date.now()}.tmp`,
+  );
+
+  try {
+    const mode = (await stat(file)).mode;
+    await writeFile(temp, contents);
+    await chmod(temp, mode);
+    await rename(temp, file);
+  } catch (error) {
+    await unlink(temp).catch(() => {});
+    throw error;
+  }
 }

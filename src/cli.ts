@@ -8,6 +8,7 @@ import { renderPretty } from "./reporters/pretty.js";
 import { renderJson } from "./reporters/json.js";
 import { renderDoctor, renderRules } from "./reporters/doctor.js";
 import { loadConfig } from "./rules/load-config.js";
+import { configWarnings, resolveConfig } from "./rules/config.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -116,6 +117,12 @@ async function main(args: string[]): Promise<void> {
       ? { config: null, path: null }
       : loadConfig(rootDir, parsed.configPath);
   const config = loaded.config;
+
+  if (config) {
+    for (const warning of configWarnings(resolveConfig(config))) {
+      console.error(`twlinter: ${warning}`);
+    }
+  }
 
   if (parsed.rules) {
     console.log(renderRules(listRules(config)));
