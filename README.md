@@ -53,8 +53,6 @@ npx twlinter@latest
 
 ![twlinter scanning a file, reporting non-canonical classes, and applying --fix](./assets/twlinter-demo.gif)
 
-[Watch the full-quality video (MP4)](./assets/twlinter-demo.mp4)
-
 Once installed, [choose your rules](#rules) or leave the defaults. Prefer to
 wire it up by hand? See [Usage](#usage) and the
 [plugin](#oxlint-and-eslint-plugin).
