@@ -70,7 +70,7 @@
   "devDependencies": {
     "@types/node": "^26.2.0",
     "husky": "^9.1.7",
-    "oxfmt": "^0.67.0",
+    "oxfmt": "^0.68.0",
     "oxlint": "^1.79.0",
     "tailwindcss-v3": "npm:tailwindcss@^3.4.19",
     "tsx": "^4.23.12",
