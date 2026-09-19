@@ -549,4 +549,380 @@ describe("custom rules", () => {
       expect(diags).toHaveLength(0);
     });
   });
+
+  describe("no-raw-colors", () => {
+    it("detects a raw palette class", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-pink-500" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("raw Tailwind palette color");
+      expect(diags[0].message).toContain("bg-custom");
+    });
+
+    it("detects palette colors behind variants and opacity", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="hover:text-zinc-100/50" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("hover:text-zinc-100/50");
+    });
+
+    it("detects important palette colors", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="!bg-red-500 text-blue-500!" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(2);
+    });
+
+    it("detects palette colors inside class helpers", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        'cn("flex", cond && "border-red-500")',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("border-red-500");
+    });
+
+    it("detects palette colors in cva base and variant values", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        'const v = cva("bg-pink-500", { variants: { tone: { hot: "text-rose-600" } } })',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(2);
+    });
+
+    it("resolves palette colors held in variables and cva configs", () => {
+      const viaVariable = runCustomRules(
+        ["no-raw-colors"],
+        'const c = "bg-pink-500";\nexport const A = () => <div className={c} />;',
+        "/test.tsx",
+      );
+      expect(viaVariable).toHaveLength(1);
+      expect(viaVariable[0].message).toContain("bg-pink-500");
+
+      const viaCva = runCustomRules(
+        ["no-raw-colors"],
+        'const tone = { hot: "bg-pink-500" };\nexport const v = cva("mt-4", { variants: { tone } });',
+        "/test.tsx",
+      );
+      expect(viaCva).toHaveLength(1);
+      expect(viaCva[0].message).toContain("bg-pink-500");
+    });
+
+    it("reads palette colors from spreads and classNames objects", () => {
+      const spread = runCustomRules(
+        ["no-raw-colors"],
+        '<div {...{ className: "bg-pink-500" }} />',
+        "/test.tsx",
+      );
+      expect(spread).toHaveLength(1);
+
+      const named = runCustomRules(
+        ["no-raw-colors"],
+        '<Button classNames={{ day: "bg-pink-500" }}>Go</Button>',
+        "/test.tsx",
+      );
+      expect(named).toHaveLength(1);
+    });
+
+    it("reads wrapperClassName and custom helper functions", () => {
+      const wrapper = runCustomRules(
+        ["no-raw-colors"],
+        '<Thing wrapperClassName="bg-pink-500" />',
+        "/test.tsx",
+      );
+      expect(wrapper).toHaveLength(1);
+
+      const customMerge = runCustomRules(
+        ["no-raw-colors"],
+        'const x = customMerge("bg-pink-500");',
+        "/test.tsx",
+        { noRawColors: { mergeFunctions: ["customMerge"] } },
+      );
+      expect(customMerge).toHaveLength(1);
+
+      const customVariants = runCustomRules(
+        ["no-raw-colors"],
+        'const x = myVariants({ base: "bg-pink-500" });',
+        "/test.tsx",
+        { noRawColors: { variantFunctions: ["myVariants"] } },
+      );
+      expect(customVariants).toHaveLength(1);
+    });
+
+    it("keeps arbitrary values out of this rule", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-[#121212] text-[rgb(1,2,3)]" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("accepts named keywords and theme tokens", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-white text-black border-transparent bg-primary text-muted-foreground" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("does not mistake non-color utilities for palette colors", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="text-sm bg-cover shadow-lg border-2 ring-2 outline-2 decoration-2" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("allows a palette color the project declares as a token", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-red-500" />',
+        "/test.tsx",
+        { themeColors: new Set(["red-500"]) },
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("lists declared theme colors in the message", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-pink-500" />',
+        "/test.tsx",
+        { themeColors: new Set(["primary", "muted-foreground"]), themeFile: "src/app.css" },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("`muted-foreground`");
+      expect(diags[0].message).toContain("`primary`");
+      expect(diags[0].message).toContain("src/app.css");
+    });
+
+    it("detects literal color attributes on intrinsic elements", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<svg><path fill="#ec4899" stroke="red" /></svg>',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(2);
+      expect(diags[0].message).toContain('fill="#ec4899"');
+      expect(diags[1].message).toContain('stroke="red"');
+    });
+
+    it("detects colors in JSX expression attributes", () => {
+      const diags = runCustomRules(["no-raw-colors"], '<svg fill={"#ec4899"} />', "/test.tsx");
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain('fill="#ec4899"');
+    });
+
+    it("leaves cascade and token attribute values alone", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<svg fill="currentColor" stroke="none" color="inherit" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("accepts var() references in attributes", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<svg fill="var(--color-primary)" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("treats color props on components as enums, not literals", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<Button color="red" fill="currentColor" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(0);
+    });
+
+    it("scopes exceptions to a component with contracts", () => {
+      const policy = {
+        noRawColors: {
+          contracts: [{ pattern: "^Badge$", allow: ["*-amber-500"] }],
+        },
+      };
+
+      const allowed = runCustomRules(
+        ["no-raw-colors"],
+        '<Badge className="bg-amber-500">Pending</Badge>',
+        "/test.tsx",
+        policy,
+      );
+      expect(allowed).toHaveLength(0);
+
+      const reported = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-amber-500">Pending</div>',
+        "/test.tsx",
+        policy,
+      );
+      expect(reported).toHaveLength(1);
+      expect(reported[0].message).toContain("bg-amber-500");
+    });
+
+    it("applies a contract message", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<Badge className="bg-pink-500">Pending</Badge>',
+        "/test.tsx",
+        {
+          noRawColors: {
+            contracts: [{ pattern: "^Badge$", message: "Badge color: {{className}}" }],
+          },
+        },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toBe("Badge color: bg-pink-500");
+    });
+
+    it("detects the newer palette utilities", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="mask-linear-from-red-500 scrollbar-thumb-zinc-500 inset-shadow-emerald-500" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(3);
+    });
+
+    it("detects functional color values in attributes", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<svg fill="oklch(0.5 0.1 20)" stroke="rgb(1, 2, 3)" />',
+        "/test.tsx",
+      );
+      expect(diags).toHaveLength(2);
+    });
+
+    it("honors allow patterns", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-amber-100 bg-pink-500" />',
+        "/test.tsx",
+        { noRawColors: { allow: ["bg-amber-100"] } },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("bg-pink-500");
+    });
+
+    it("checks only denied classes when deny is set alone", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-amber-500 bg-pink-500" />',
+        "/test.tsx",
+        { noRawColors: { deny: ["bg-amber-500"] } },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("bg-amber-500");
+    });
+
+    it("uses a custom message", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-pink-500" />',
+        "/test.tsx",
+        { noRawColors: { message: "Use a token for {{className}}." } },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toBe("Use a token for bg-pink-500.");
+    });
+
+    it("fills message placeholders", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-pink-500" />',
+        "/test.tsx",
+        {
+          themeColors: new Set(["primary"]),
+          themeFile: "src/app.css",
+          resolveColor: (name) => (name === "pink-500" || name === "primary" ? "#ec4899" : null),
+          noRawColors: {
+            message: "Use {{suggestions}} from {{file}} ({{tokens}}) not {{className}}.",
+          },
+        },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("Use bg-primary from src/app.css");
+      expect(diags[0].message).toContain("`primary`");
+      expect(diags[0].message).toContain("not bg-pink-500");
+    });
+
+    it("scans every string literal when scanAllStrings is set", () => {
+      const source = 'const plain = "bg-pink-500";';
+      expect(runCustomRules(["no-raw-colors"], source, "/test.tsx")).toHaveLength(0);
+      expect(
+        runCustomRules(["no-raw-colors"], source, "/test.tsx", {
+          noRawColors: { scanAllStrings: true },
+        }),
+      ).toHaveLength(1);
+    });
+
+    it("suggests the nearest theme color when values resolve", () => {
+      const diags = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="text-zinc-500" />',
+        "/test.tsx",
+        {
+          themeColors: new Set(["muted", "primary"]),
+          resolveColor: (name) =>
+            name === "zinc-500" ? "#71717a" : name === "muted" ? "#71717a" : null,
+        },
+      );
+      expect(diags).toHaveLength(1);
+      expect(diags[0].message).toContain("`text-muted`");
+    });
+
+    it("reports undeclared theme colors and corrects typos", () => {
+      const options = {
+        themeColors: new Set(["primary"]),
+        classifyClass: (className: string) =>
+          className === "text-primry" || className === "bg-brand"
+            ? ("unknown-color" as const)
+            : ("other" as const),
+      };
+
+      const typo = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="text-primry" />',
+        "/test.tsx",
+        options,
+      );
+      expect(typo).toHaveLength(1);
+      expect(typo[0].message).toContain("Did you mean `text-primary`");
+
+      const undeclared = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="bg-brand" />',
+        "/test.tsx",
+        options,
+      );
+      expect(undeclared).toHaveLength(1);
+      expect(undeclared[0].message).toContain("not a declared theme color");
+
+      const other = runCustomRules(
+        ["no-raw-colors"],
+        '<div className="text-sm" />',
+        "/test.tsx",
+        options,
+      );
+      expect(other).toHaveLength(0);
+    });
+  });
 });

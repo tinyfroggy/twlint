@@ -44,7 +44,7 @@ describe("plugin", () => {
     for (const [name, rule] of Object.entries(rules)) {
       expect(rule.meta.type).toBeTruthy();
       expect(rule.meta.docs.description.length).toBeGreaterThan(0);
-      expect(rule.meta.schema).toEqual([]);
+      expect(rule.meta.schema).toBeInstanceOf(Array);
       expect(typeof rule.create).toBe("function");
       expect(name.length).toBeGreaterThan(0);
     }
@@ -60,6 +60,26 @@ describe("plugin", () => {
 
   it("reports nothing for clean source", () => {
     expect(runRule(rules["no-duplicate-utilities"], '<div className="p-4" />')).toEqual([]);
+  });
+
+  it("passes rule options through to the check", () => {
+    const reports: CapturedReport[] = [];
+    const context: RuleContext = {
+      sourceCode: { getText: () => '<div className="bg-amber-100 bg-pink-500" />' },
+      filename: "/test.tsx",
+      options: [{ allow: ["bg-amber-100"] }],
+      report(descriptor) {
+        reports.push({
+          message: descriptor.message,
+          line: descriptor.loc.line,
+          column: descriptor.loc.column,
+        });
+      },
+    };
+
+    rules["no-raw-colors"].create(context).Program();
+    expect(reports).toHaveLength(1);
+    expect(reports[0].message).toContain("bg-pink-500");
   });
 
   it("uses a 0-based column for the reported location", () => {

@@ -27,6 +27,12 @@ That scans the current project and prints the default terminal report. For the s
 npx twlinter@latest --json
 ```
 
+For problems with a concrete replacement, apply the fixes in place:
+
+```bash
+npx twlinter@latest --fix
+```
+
 twlinter detects the Tailwind CSS version from the project's installed
 `tailwindcss` package. v4 projects are read from a CSS entry that imports
 `tailwindcss`; v3 projects are read from `tailwind.config.*` (or the v3
@@ -48,6 +54,7 @@ Custom rules run in both the CLI and the [Oxlint/ESLint plugin](#oxlint-plugin):
 | `no-magic-spacing` | Arbitrary spacing values that land off the 4px scale. |
 | `detect-conflicts-in-template-literals` | The same utility across parts of a template literal. |
 | `prefer-design-tokens` | Raw hex colors such as `bg-[#121212]` instead of a theme token. |
+| `no-raw-colors` | Raw Tailwind palette colors such as `bg-pink-500` or `fill="#ec4899"` instead of a theme token. |
 
 The CLI also runs Tailwind's language service, which needs the design system:
 
@@ -68,6 +75,15 @@ Tailwind utilities, `@utility` names, and plain class selectors from the
 theme's CSS import graph, and reports anything else with a spelling
 suggestion when one is close.
 Every [custom rule](#rules) above runs on both versions.
+The CLI reads the project's declared `--color-*` tokens and passes them to
+`no-raw-colors`, so a palette color the theme overrides is allowed and the
+message can name the project's colors. With a readable theme, `no-raw-colors`
+also suggests the nearest theme color, reports undeclared color tokens such as
+`bg-brand` with spelling corrections, and names the nearest token for literal
+SVG colors. Undeclared color tokens are reported by `no-raw-colors` instead of
+`no-unknown-classes`, which keeps its suggestion for typos of other utilities.
+The [plugin](#oxlint-plugin) has no project context, so it checks the built-in
+palette only.
 When the CLI detects v3, the spacing-scale rules only suggest class names that
 exist on the v3 scale; the [plugin](#oxlint-plugin) has no project context and
 keeps v4 behavior.
@@ -106,6 +122,26 @@ export default [
 ```
 
 Rule ids match the `rule` field in the CLI report (`no-magic-spacing`, `prefer-theme-scale`, and so on). Run the CLI, the plugin, or both.
+
+`no-raw-colors` accepts `allow` and `deny` class patterns, a custom `message`
+(placeholders `{{className}}`, `{{file}}`, `{{tokens}}`, `{{suggestions}}`),
+`scanAllStrings`, extra `mergeFunctions`/`variantFunctions`, and component
+`contracts`. It is fixable, so `oxlint --fix` can apply the replacement:
+
+```json
+{
+  "jsPlugins": ["twlinter"],
+  "rules": {
+    "twlinter/no-raw-colors": [
+      "error",
+      {
+        "allow": ["*-amber-100"],
+        "contracts": [{ "pattern": "^Badge$", "allow": ["*-amber-500"] }]
+      }
+    ]
+  }
+}
+```
 
 ## Output
 

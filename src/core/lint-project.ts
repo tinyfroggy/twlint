@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import os from "node:os";
 
 import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
+import { applyFixes } from "./apply-fixes.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
 import { resolveTailwindProject } from "../discovery/resolve-tailwind-project.js";
 import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
@@ -12,7 +13,12 @@ import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
 import type { CandidateInput, Diagnostic, LintResult } from "../types.js";
 import { MAX_FILE_SIZE_BYTES } from "../constants.js";
 
-export async function lintProject(): Promise<LintResult> {
+export type LintOptions = {
+  /** Apply machine-applicable fixes and re-scan. */
+  fix?: boolean;
+};
+
+export async function lintProject(options: LintOptions = {}): Promise<LintResult> {
   const startedAt = performance.now();
   const rootDir = process.cwd();
   const entries = await resolveProjectInputFiles();
@@ -27,8 +33,13 @@ export async function lintProject(): Promise<LintResult> {
   }
 
   const project = await resolveTailwindProject(rootDir);
-  const candidates = await collectCandidateInputs(entries);
-  const diagnostics = await validateCandidates(project, candidates);
+  let candidates = await collectCandidateInputs(entries);
+  let diagnostics = await validateCandidates(project, candidates);
+
+  if (options.fix && (await applyFixes(diagnostics)) > 0) {
+    candidates = await collectCandidateInputs(entries);
+    diagnostics = await validateCandidates(project, candidates);
+  }
 
   diagnostics.sort((a, b) => {
     return a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column;
@@ -51,6 +62,7 @@ async function safeValidate(
     validation.designSystem,
     candidate,
     validation.dependencyPaths,
+    validation.theme,
   );
 }
 

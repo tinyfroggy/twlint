@@ -1,6 +1,6 @@
 {
   "name": "twlinter",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "CLI for scanning projects and reporting non-canonical Tailwind CSS classes",
   "bin": {
@@ -62,6 +62,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@babel/parser": "^7.29.9",
+    "@babel/types": "^7.29.8",
     "@tailwindcss/language-service": "^0.16.0",
     "fast-glob": "^3.3.3",
     "tailwindcss": "^4.3.3",

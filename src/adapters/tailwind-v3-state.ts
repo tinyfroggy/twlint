@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createState, getDefaultTailwindSettings } from "./tailwind-language-service-api.js";
+import { flattenColorScale } from "../core/theme-tokens.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
 const require = createRequire(import.meta.url);
@@ -91,7 +92,18 @@ export async function createV3ValidationState(project: TailwindV3Project) {
     dependencyPaths.add(configPath);
   }
 
-  return { state, dependencyPaths };
+  // Colors the project itself declared, so the default palette is not
+  // mistaken for the project's vocabulary. Values come from the resolved
+  // config, which also carries the defaults a suggestion may point at.
+  const originalTheme = (originalConfig.theme ?? {}) as Record<string, unknown>;
+  const extend = originalTheme.extend as Record<string, unknown> | undefined;
+  const declaredColors = flattenColorScale(extend?.colors);
+  flattenColorScale(originalTheme.colors, "", declaredColors);
+  const allColors = flattenColorScale(
+    (resolvedConfig as { theme?: { colors?: unknown } }).theme?.colors,
+  );
+
+  return { state, dependencyPaths, declaredColors, allColors };
 }
 
 async function loadProjectConfig(options: {

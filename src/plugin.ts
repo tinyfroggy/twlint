@@ -1,6 +1,6 @@
 import { CUSTOM_RULES } from "./custom-rules/index.js";
 
-import type { RuleCheck } from "./custom-rules/index.js";
+import type { CustomRuleOptions, RuleCheck } from "./custom-rules/index.js";
 
 export type RuleSeverity = "problem" | "suggestion" | "layout";
 
@@ -10,17 +10,35 @@ export type RuleMeta = {
     description: string;
     url: string;
   };
-  schema: [];
+  schema: unknown[];
   messages: Record<string, string>;
+  fixable?: "code" | "whitespace";
+  hasSuggestions?: boolean;
 };
 
 export type SourceCode = {
   getText(): string;
 };
 
+export type Fix = {
+  range: [number, number];
+  text: string;
+};
+
+export type RuleFixer = {
+  replaceTextRange(range: [number, number], text: string): Fix;
+};
+
+export type RuleSuggestion = {
+  desc: string;
+  fix(fixer: RuleFixer): Fix;
+};
+
 export type RuleReport = {
   loc: { line: number; column: number };
   message: string;
+  fix?(fixer: RuleFixer): Fix;
+  suggest?: RuleSuggestion[];
 };
 
 export type RuleContext = {
@@ -28,6 +46,7 @@ export type RuleContext = {
   getSourceCode?(): SourceCode;
   filename?: string;
   getFilename?(): string;
+  options?: unknown[];
   report(descriptor: RuleReport): void;
 };
 
@@ -40,7 +59,16 @@ export type RuleModule = {
   create(context: RuleContext): RuleVisitors;
 };
 
-const RULES: Record<string, { description: string; type: RuleSeverity }> = {
+const RULES: Record<
+  string,
+  {
+    description: string;
+    type: RuleSeverity;
+    schema?: unknown[];
+    fixable?: "code" | "whitespace";
+    hasSuggestions?: boolean;
+  }
+> = {
   "no-duplicate-utilities": {
     description: "Disallow the same utility appearing more than once in one class list.",
     type: "problem",
@@ -81,6 +109,40 @@ const RULES: Record<string, { description: string; type: RuleSeverity }> = {
     description: "Prefer theme color tokens over raw hex colors in arbitrary values.",
     type: "suggestion",
   },
+  "no-raw-colors": {
+    description: "Disallow raw Tailwind palette colors in classes and color attributes.",
+    type: "problem",
+    fixable: "code",
+    hasSuggestions: true,
+    schema: [
+      {
+        type: "object",
+        properties: {
+          allow: { type: "array", items: { type: "string" } },
+          deny: { type: "array", items: { type: "string" } },
+          message: { type: "string" },
+          scanAllStrings: { type: "boolean" },
+          mergeFunctions: { type: "array", items: { type: "string" } },
+          variantFunctions: { type: "array", items: { type: "string" } },
+          contracts: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                pattern: { type: "string" },
+                allow: { type: "array", items: { type: "string" } },
+                deny: { type: "array", items: { type: "string" } },
+                message: { type: "string" },
+              },
+              required: ["pattern"],
+              additionalProperties: false,
+            },
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
+  },
 };
 
 function getSourceCode(context: RuleContext): SourceCode | undefined {
@@ -92,7 +154,13 @@ function getFilename(context: RuleContext): string {
 }
 
 function createRule(name: string, check: RuleCheck): RuleModule {
-  const meta = RULES[name] ?? {
+  const meta: {
+    description: string;
+    type: RuleSeverity;
+    schema?: unknown[];
+    fixable?: "code" | "whitespace";
+    hasSuggestions?: boolean;
+  } = RULES[name] ?? {
     description: `twlinter rule ${name}.`,
     type: "suggestion" as const,
   };
@@ -104,8 +172,10 @@ function createRule(name: string, check: RuleCheck): RuleModule {
         description: meta.description,
         url: "https://github.com/tinyfroggy/twlint#readme",
       },
-      schema: [],
+      schema: meta.schema ?? [],
       messages: {},
+      ...(meta.fixable ? { fixable: meta.fixable } : {}),
+      ...(meta.hasSuggestions ? { hasSuggestions: true } : {}),
     },
     create(context) {
       return {
@@ -115,19 +185,37 @@ function createRule(name: string, check: RuleCheck): RuleModule {
 
           let diagnostics;
           try {
-            diagnostics = check(sourceCode.getText(), getFilename(context));
+            const ruleOptions = context.options?.[0] as CustomRuleOptions["noRawColors"];
+            diagnostics = check(sourceCode.getText(), getFilename(context), {
+              noRawColors: ruleOptions ?? undefined,
+            });
           } catch {
             return;
           }
 
           for (const diagnostic of diagnostics) {
-            context.report({
+            const report: RuleReport = {
               loc: {
                 line: diagnostic.line,
                 column: Math.max(0, diagnostic.column - 1),
               },
               message: diagnostic.message,
-            });
+            };
+
+            if (diagnostic.fix) {
+              const { range, text } = diagnostic.fix;
+              report.fix = (fixer) => fixer.replaceTextRange(range, text);
+
+              const alternatives = diagnostic.suggestions ?? [];
+              if (alternatives.length > 0) {
+                report.suggest = alternatives.map((replacement) => ({
+                  desc: `Replace with "${replacement}"`,
+                  fix: (fixer: RuleFixer) => fixer.replaceTextRange(range, replacement),
+                }));
+              }
+            }
+
+            context.report(report);
           }
         },
       };

@@ -12,11 +12,15 @@ import {
 } from "./tailwind-language-service-api.js";
 import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
 import { getUnknownClassDiagnostics } from "../core/unknown-classes.js";
-import { runCustomRules } from "../custom-rules/index.js";
+import { createClassKind, createV3ClassKind } from "../core/class-kind.js";
+import { readDeclaredColorTokens } from "../core/theme-tokens.js";
+import { isUndeclaredColorToken, runCustomRules } from "../custom-rules/index.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
 
+import type { ClassKind } from "../core/class-kind.js";
 import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
 import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
+import type { CustomRuleOptions } from "../custom-rules/index.js";
 
 const DIAGNOSTIC_KINDS = [
   "suggestCanonicalClasses",
@@ -24,14 +28,29 @@ const DIAGNOSTIC_KINDS = [
   "usedBlocklistedClass",
 ] as const;
 
+/** Project theme context handed to the custom rules. */
+export type ThemeContext = {
+  colors: ReadonlySet<string>;
+  file?: string;
+  resolveColor?: (name: string) => string | null;
+  classifyClass?: (className: string) => ClassKind;
+};
+
 export async function createValidationState(project: TailwindProject) {
   if (project.version === 3) {
-    const { state, dependencyPaths } = await createV3ValidationState(project);
+    const { state, dependencyPaths, declaredColors, allColors } =
+      await createV3ValidationState(project);
 
     return {
       dependencyPaths,
       state,
       designSystem: undefined as unknown,
+      theme: {
+        colors: new Set(declaredColors.keys()),
+        file: project.configPath ? path.relative(process.cwd(), project.configPath) : undefined,
+        resolveColor: (name) => declaredColors.get(name) ?? allColors.get(name) ?? null,
+        classifyClass: createV3ClassKind(state),
+      } satisfies ThemeContext,
     };
   }
 
@@ -64,6 +83,36 @@ export async function createValidationState(project: TailwindProject) {
     dependencyPaths,
     state,
     designSystem,
+    theme: {
+      colors: readDeclaredColorTokens(dependencyPaths),
+      file: path.relative(process.cwd(), project.cssEntry),
+      classifyClass: createClassKind(designSystem),
+      resolveColor: createColorResolver(designSystem),
+    } satisfies ThemeContext,
+  };
+}
+
+/** Resolve a `--color-<name>` token through the design system, if it can. */
+function createColorResolver(designSystem: unknown): (name: string) => string | null {
+  const design = designSystem as { resolveThemeValue?: (key: string) => unknown } | undefined;
+  if (!design || typeof design.resolveThemeValue !== "function") return () => null;
+
+  const resolve = design.resolveThemeValue.bind(design);
+  const cache = new Map<string, string | null>();
+
+  return (name: string): string | null => {
+    const cached = cache.get(name);
+    if (cached !== undefined) return cached;
+
+    let value: string | null = null;
+    try {
+      const resolved = resolve(`--color-${name}`);
+      value = typeof resolved === "string" ? resolved : null;
+    } catch {
+      value = null;
+    }
+    cache.set(name, value);
+    return value;
   };
 }
 
@@ -72,6 +121,7 @@ export async function validateCandidate(
   designSystem: unknown,
   candidate: CandidateInput,
   dependencyPaths?: Iterable<string>,
+  theme?: ThemeContext,
 ): Promise<Diagnostic[]> {
   const document = TextDocument.create(
     pathToFileURL(candidate.file).href,
@@ -80,6 +130,14 @@ export async function validateCandidate(
     candidate.text,
   );
   const diagnostics: Diagnostic[] = [];
+
+  const ruleOptions: CustomRuleOptions = {
+    tailwindVersion: state?.v4 === false ? 3 : 4,
+    themeColors: theme?.colors,
+    themeFile: theme?.file,
+    resolveColor: theme?.resolveColor,
+    classifyClass: theme?.classifyClass,
+  };
 
   for (const kind of DIAGNOSTIC_KINDS) {
     try {
@@ -110,17 +168,15 @@ export async function validateCandidate(
     diagnostics.push(
       ...getUnknownClassDiagnostics(state, designSystem, document, candidate.file, {
         dependencyPaths,
+        // `no-raw-colors` owns undeclared color tokens when a theme is readable.
+        ownsColorToken: (token) => isUndeclaredColorToken(token, ruleOptions),
       }),
     );
   } catch {
     // The existence check requires a Tailwind design system or v3 JIT context.
   }
 
-  diagnostics.push(
-    ...runCustomRules(candidate.text, candidate.file, {
-      tailwindVersion: state?.v4 === false ? 3 : 4,
-    }),
-  );
+  diagnostics.push(...runCustomRules(candidate.text, candidate.file, ruleOptions));
 
   return diagnostics;
 }

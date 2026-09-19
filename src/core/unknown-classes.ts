@@ -24,6 +24,11 @@ const cssClassesCache = new WeakMap<object, Set<string>>();
 export type UnknownClassOptions = {
   /** CSS files the project's Tailwind theme imports. */
   dependencyPaths?: Iterable<string>;
+  /**
+   * Tokens another rule owns, so this rule stays quiet. `no-raw-colors`
+   * reports undeclared color tokens with color-specific guidance.
+   */
+  ownsColorToken?: (token: string) => boolean;
 };
 
 /**
@@ -53,7 +58,10 @@ export function getUnknownClassDiagnostics(
 
     const results = judge(candidates);
     const unknown = candidates.filter(
-      (token, index) => results[index] === null && !isDefinedInCss(token, cssClasses),
+      (token, index) =>
+        results[index] === null &&
+        !isDefinedInCss(token, cssClasses) &&
+        !options.ownsColorToken?.(token),
     );
     if (unknown.length === 0) continue;
 

@@ -16,6 +16,8 @@ export function renderJson(result: LintResult): string {
       rule: d.rule,
       message: d.message,
       source: d.source,
+      ...(d.fix ? { fix: d.fix } : {}),
+      ...(d.suggestions ? { suggestions: d.suggestions } : {}),
     })),
   };
 

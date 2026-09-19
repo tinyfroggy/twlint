@@ -46,4 +46,10 @@ describe("mightContainTailwindClasses", () => {
   it("detects class= in MDX files", () => {
     expect(mightContainTailwindClasses("doc.mdx", '<div class="grid">')).toBe(true);
   });
+
+  it("detects SVG color attributes without class attributes", () => {
+    expect(mightContainTailwindClasses("icon.tsx", '<svg fill="#ec4899" />')).toBe(true);
+    expect(mightContainTailwindClasses("icon.tsx", '<path stroke="red" />')).toBe(true);
+    expect(mightContainTailwindClasses("icon.html", '<path stroke="red" />')).toBe(true);
+  });
 });

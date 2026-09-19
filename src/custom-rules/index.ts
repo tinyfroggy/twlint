@@ -2,14 +2,72 @@ import { Diagnostic } from "../types.js";
 import path from "node:path";
 import {
   extractClassLists,
+  extractHelperClassLists,
+  extractStringLiterals,
+  extractElements,
   extractElementsWithClasses,
   extractApplyBlocks,
   stripVariants,
   parseClassName,
+  VARIANT_CLASS_FUNCTIONS,
 } from "./utils.js";
+import {
+  COLOR_ATTRIBUTES,
+  isRawColorValue,
+  splitColorUtility,
+  splitPaletteClass,
+} from "./color-data.js";
+import { nearestColorTokens, parseColor, roleOf } from "./color-values.js";
+import { collectJsClassSites, isJsFile } from "./js-sites.js";
+
+import { boundedEditDistance } from "../core/class-kind.js";
+import type { ClassKind } from "../core/class-kind.js";
+import type { Lab } from "./color-values.js";
+
+/** A component-scoped exception, matched against the JSX tag name. */
+export type NoRawColorsContract = {
+  /** Regular expression the component name must match, e.g. `^Badge$`. */
+  pattern: string;
+  allow?: string[];
+  deny?: string[];
+  message?: string;
+};
+
+/** User-facing `no-raw-colors` configuration, mirroring shadcn's rule. */
+export type NoRawColorsPolicy = {
+  /** Class patterns that are allowed, e.g. `["*-amber-100"]`. */
+  allow?: string[];
+  /** Class patterns that are always reported, taking precedence over `allow`. */
+  deny?: string[];
+  /** Replaces the built-in message. Supports `{{className}}`, `{{file}}`, `{{tokens}}`, `{{suggestions}}`. */
+  message?: string;
+  /** Scan every string literal, not just recognized class sites. */
+  scanAllStrings?: boolean;
+  /** Component-scoped allow/deny/message, matched on the JSX tag name. */
+  contracts?: NoRawColorsContract[];
+  /** Extra functions whose arguments are class lists, e.g. `["customMerge"]`. */
+  mergeFunctions?: string[];
+  /** Extra functions whose object values are class lists, e.g. `["myVariants"]`. */
+  variantFunctions?: string[];
+};
 
 export type CustomRuleOptions = {
   tailwindVersion?: 3 | 4;
+  /**
+   * Color token names (`--color-<name>`) the project declares. When present,
+   * a palette class matching a declared token is allowed, and the rule can
+   * point at the project's own colors. Supplied by the CLI; absent in the
+   * plugin, which has no project context.
+   */
+  themeColors?: ReadonlySet<string>;
+  /** Theme stylesheet, shown in messages so agents know where to add a token. */
+  themeFile?: string;
+  /** Resolve a color token name to a CSS color, e.g. `red-500` -> `oklch(...)`. */
+  resolveColor?: (name: string) => string | null;
+  /** Classify a class as a color utility, another utility, or an unknown color. */
+  classifyClass?: (className: string) => ClassKind;
+  /** User configuration for the `no-raw-colors` rule. */
+  noRawColors?: NoRawColorsPolicy;
 };
 
 export type RuleCheck = (
@@ -30,6 +88,8 @@ function diag(
   offset: number,
   message: string,
   rule: string,
+  fix?: { range: [number, number]; text: string },
+  suggestions?: string[],
 ): Diagnostic {
   const pos = positionAtOffset(fileText, offset);
   return {
@@ -40,6 +100,8 @@ function diag(
     rule,
     message,
     source: "tw",
+    ...(fix ? { fix } : {}),
+    ...(suggestions && suggestions.length > 0 ? { suggestions } : {}),
   };
 }
 
@@ -477,6 +539,374 @@ function checkDetectConflictsInTemplateLiterals(text: string, filePath: string):
   return results;
 }
 
+// ─── no-raw-colors ──────────────────────────────────────────────────────────
+
+/** Color keywords that name a color without being a raw palette color. */
+const ALLOWED_COLOR_KEYWORDS = new Set(["white", "black", "transparent", "current", "inherit"]);
+
+/** Rebuild a class around a new base, keeping variants, `!`, and `-`. */
+function withBase(original: string, newBase: string): string {
+  const parsed = parseClassName(original);
+  const prefix = parsed.variants.length > 0 ? `${parsed.variants.join(":")}:` : "";
+  const bang = parsed.important ? "!" : "";
+  const negative = parsed.negative ? "-" : "";
+  return `${prefix}${bang}${negative}${newBase}`;
+}
+
+type ClassSiteLike = { offset: number; ranges?: Map<string, [number, number]> };
+
+/** Source range of a class token, preferring the AST resolver's range. */
+function tokenRange(text: string, site: ClassSiteLike, className: string): [number, number] | null {
+  const direct = site.ranges?.get(className);
+  if (direct) return direct;
+
+  const at = text.indexOf(className, site.offset);
+  return at === -1 ? null : [at, at + className.length];
+}
+
+function compilePatterns(patterns?: string[]): RegExp[] {
+  return (patterns ?? []).map((pattern) => {
+    const source = pattern
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    return new RegExp(`^${source}$`);
+  });
+}
+
+function matchesAny(patterns: RegExp[], token: string): boolean {
+  return patterns.some((pattern) => pattern.test(token));
+}
+
+type CompiledContract = {
+  match: RegExp;
+  allow: RegExp[];
+  deny: RegExp[];
+  message?: string;
+};
+
+function compileContracts(contracts?: NoRawColorsContract[]): CompiledContract[] {
+  return (contracts ?? []).flatMap((contract) => {
+    try {
+      return [
+        {
+          match: new RegExp(contract.pattern),
+          allow: compilePatterns(contract.allow),
+          deny: compilePatterns(contract.deny),
+          message: contract.message,
+        },
+      ];
+    } catch {
+      // An invalid pattern is ignored rather than failing the whole rule.
+      return [];
+    }
+  });
+}
+
+function applyMessage(template: string, data: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => data[key] ?? "");
+}
+
+/** Placeholder values for a custom `message`. */
+function messageData(
+  className: string,
+  options: CustomRuleOptions | undefined,
+  replacements: string[],
+): Record<string, string> {
+  const tokens = options?.themeColors;
+  return {
+    className,
+    file: options?.themeFile ?? "",
+    tokens: tokens ? formatTokenList(tokens) : "",
+    suggestions: replacements.join(", "),
+  };
+}
+
+/**
+ * `allow`/`deny`: deny wins over allow, and deny alone means only the named
+ * classes are checked.
+ */
+function policyAllows(token: string, allow: RegExp[], deny: RegExp[]): boolean {
+  if (matchesAny(deny, token)) return false;
+  if (matchesAny(allow, token)) return true;
+  return deny.length > 0 && allow.length === 0;
+}
+
+function formatTokenList(colors: ReadonlySet<string>, limit = 12): string {
+  const names = [...colors].sort();
+  const shown = names
+    .slice(0, limit)
+    .map((name) => `\`${name}\``)
+    .join(", ");
+  return names.length <= limit ? shown : `${shown} (+${names.length - limit} more)`;
+}
+
+/** Theme tokens that parse to a color, for nearest-color suggestions. */
+const colorValueCache = new WeakMap<ReadonlySet<string>, Map<string, Lab>>();
+
+function themeColorValues(options?: CustomRuleOptions): Map<string, Lab> {
+  if (!options?.themeColors || !options.resolveColor) return new Map();
+
+  const cached = colorValueCache.get(options.themeColors);
+  if (cached) return cached;
+
+  const values = new Map<string, Lab>();
+  for (const name of options.themeColors) {
+    const raw = options.resolveColor(name);
+    const lab = raw ? parseColor(raw) : null;
+    if (lab) values.set(name, lab);
+  }
+
+  colorValueCache.set(options.themeColors, values);
+  return values;
+}
+
+/**
+ * True when a class is a color utility whose value is not a declared theme
+ * color and is not a built-in palette color. The CLI uses this both to report
+ * the token and to let `no-unknown-classes` leave it to this rule.
+ */
+export function isUndeclaredColorToken(token: string, options?: CustomRuleOptions): boolean {
+  const colors = options?.themeColors;
+  if (!colors || colors.size === 0 || !options?.classifyClass) return false;
+
+  let base = parseClassName(token).base;
+  if (base.endsWith("!")) base = base.slice(0, -1);
+  if (base.includes("[") || base.includes("(")) return false;
+  if (splitPaletteClass(base)) return false;
+
+  const utility = splitColorUtility(base);
+  if (!utility) return false;
+  if (ALLOWED_COLOR_KEYWORDS.has(utility.value)) return false;
+  if (colors.has(utility.value)) return false;
+
+  return options.classifyClass(base) === "unknown-color";
+}
+
+function didYouMean(value: string, names: ReadonlySet<string>): string | null {
+  const maxDistance = Math.max(1, Math.min(3, Math.floor(value.length / 3) + 1));
+  let best: string | null = null;
+  let bestDistance = maxDistance + 1;
+
+  for (const name of names) {
+    if (Math.abs(name.length - value.length) >= bestDistance) continue;
+
+    const distance = boundedEditDistance(value, name, bestDistance - 1);
+    if (distance < bestDistance) {
+      best = name;
+      bestDistance = distance;
+    }
+  }
+
+  return best !== null && bestDistance <= maxDistance ? best : null;
+}
+
+function rawColorMessage(
+  className: string,
+  prefix: string,
+  replacements: string[],
+  options?: CustomRuleOptions,
+): string {
+  const tokens = options?.themeColors;
+  const target = options?.themeFile ? `\`${options.themeFile}\`` : "global CSS";
+  const declare = `or declare one with \`@theme { --color-custom: <value>; }\` in ${target} and use \`${prefix}-custom\`.`;
+
+  if (replacements.length > 0) {
+    const list = replacements.map((replacement) => `\`${replacement}\``).join(" or ");
+    return `\`${className}\` uses a raw Tailwind palette color. Use ${list}, ${declare}`;
+  }
+  if (tokens && tokens.size > 0) {
+    return `\`${className}\` uses a raw Tailwind palette color. Use one of: ${formatTokenList(tokens)}, ${declare}`;
+  }
+  return `\`${className}\` uses a raw Tailwind palette color. Use a theme color token, ${declare}`;
+}
+
+function undeclaredMessage(
+  className: string,
+  suggestion: string | undefined,
+  options?: CustomRuleOptions,
+): string {
+  const tokens = options?.themeColors ?? new Set<string>();
+  const target = options?.themeFile ? `\`${options.themeFile}\`` : "global CSS";
+  const list = formatTokenList(tokens);
+  const add = `To add a color, declare \`@theme { --color-<name>: <value>; }\` in ${target} first.`;
+
+  if (suggestion) {
+    return `\`${className}\` is not a declared theme color. Did you mean \`${suggestion}\`? Declared colors: ${list}. ${add}`;
+  }
+  return `\`${className}\` is not a declared theme color. Use one of: ${list}, or ${add.charAt(0).toLowerCase()}${add.slice(1)}`;
+}
+
+function paletteReplacements(
+  className: string,
+  palette: ReturnType<typeof splitPaletteClass> & object,
+  values: Map<string, Lab>,
+  options?: CustomRuleOptions,
+): string[] {
+  if (values.size === 0 || !options?.resolveColor) return [];
+
+  const raw = options.resolveColor(palette.color);
+  const lab = raw ? parseColor(raw) : null;
+  if (!lab) return [];
+
+  return nearestColorTokens(lab, values, roleOf(palette.prefix)).map((name) =>
+    withBase(className, `${palette.prefix}-${name}${palette.opacity}`),
+  );
+}
+
+/** JS/TS files use the AST resolver; other files use text extraction. */
+function collectClassLists(
+  text: string,
+  filePath: string,
+  functions: Set<string>,
+): ReturnType<typeof extractClassLists> {
+  if (isJsFile(filePath)) {
+    const sites = collectJsClassSites(text, functions);
+    if (sites.length > 0) return sites;
+  }
+  return [...extractClassLists(text), ...extractHelperClassLists(text, functions)];
+}
+
+function checkNoRawColors(
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+): Diagnostic[] {
+  const results: Diagnostic[] = [];
+  const themeColors = options?.themeColors;
+  const policy = options?.noRawColors;
+  const baseAllow = compilePatterns(policy?.allow);
+  const baseDeny = compilePatterns(policy?.deny);
+  const contracts = compileContracts(policy?.contracts);
+  const values = themeColorValues(options);
+  const functions = new Set(VARIANT_CLASS_FUNCTIONS);
+  for (const name of policy?.mergeFunctions ?? []) functions.add(name);
+  for (const name of policy?.variantFunctions ?? []) functions.add(name);
+
+  const classLists = policy?.scanAllStrings
+    ? extractStringLiterals(text)
+    : collectClassLists(text, filePath, functions);
+
+  for (const site of classLists) {
+    const component = (site as { component?: string }).component;
+    const contract = component ? contracts.find((entry) => entry.match.test(component)) : undefined;
+    const allow = contract ? [...baseAllow, ...contract.allow] : baseAllow;
+    const deny = contract ? [...baseDeny, ...contract.deny] : baseDeny;
+    const message = contract?.message ?? policy?.message;
+
+    for (const className of site.classes) {
+      let base = parseClassName(className).base;
+      if (base.endsWith("!")) base = base.slice(0, -1);
+      if (base.includes("[") || base.includes("(")) continue;
+      if (policyAllows(className, allow, deny)) continue;
+
+      const palette = splitPaletteClass(base);
+      if (palette) {
+        if (themeColors?.has(palette.color)) continue;
+        const replacements = paletteReplacements(className, palette, values, options);
+        const range = tokenRange(text, site, className);
+        const fix = range && replacements[0] ? { range, text: replacements[0] } : undefined;
+        const text2 =
+          message !== undefined
+            ? applyMessage(message, messageData(className, options, replacements))
+            : rawColorMessage(className, palette.prefix, replacements, options);
+        results.push(
+          diag(
+            filePath,
+            text,
+            range?.[0] ?? site.offset,
+            text2,
+            "no-raw-colors",
+            fix,
+            replacements.length > 1 ? replacements.slice(1) : undefined,
+          ),
+        );
+        continue;
+      }
+
+      if (!isUndeclaredColorToken(className, options)) continue;
+      const utility = splitColorUtility(base);
+      if (!utility) continue;
+
+      const suggestionName = themeColors ? didYouMean(utility.value, themeColors) : null;
+      const suggestion = suggestionName
+        ? withBase(className, `${utility.prefix}-${suggestionName}${utility.opacity}`)
+        : undefined;
+      const range = tokenRange(text, site, className);
+      const fix = range && suggestion ? { range, text: suggestion } : undefined;
+      const text2 =
+        message !== undefined
+          ? applyMessage(message, messageData(className, options, suggestion ? [suggestion] : []))
+          : undeclaredMessage(className, suggestion, options);
+      results.push(diag(filePath, text, range?.[0] ?? site.offset, text2, "no-raw-colors", fix));
+    }
+  }
+
+  results.push(...checkRawColorAttributes(text, filePath, options, values));
+  return results;
+}
+
+/** Literal values on SVG/JSX color attributes such as `fill="#ec4899"`. */
+function checkRawColorAttributes(
+  text: string,
+  filePath: string,
+  options?: CustomRuleOptions,
+  values: Map<string, Lab> = new Map(),
+): Diagnostic[] {
+  const results: Diagnostic[] = [];
+
+  for (const element of extractElements(text)) {
+    // On a component, `color="red"` is an enum prop, not a literal color.
+    if (!/^[a-z]/.test(element.tag)) continue;
+
+    for (const [name, rawValue] of Object.entries(element.attrs)) {
+      if (!COLOR_ATTRIBUTES.has(name)) continue;
+
+      const value = literalAttributeValue(rawValue);
+      if (value === null || !isRawColorValue(value)) continue;
+
+      const lab = values.size > 0 ? parseColor(value) : null;
+      const [token] = lab ? nearestColorTokens(lab, values, "text", 1) : [];
+      const source = `${name}="${value}"`;
+      const replacement = token ? [`var(--color-${token})`] : [];
+
+      const message =
+        options?.noRawColors?.message !== undefined
+          ? applyMessage(options.noRawColors.message, messageData(source, options, replacement))
+          : token
+            ? `\`${source}\` hardcodes a color. Use \`currentColor\` with a text color class, or the nearest theme token: \`var(--color-${token})\`.`
+            : `\`${source}\` hardcodes a color. Use \`currentColor\` with a text color class, or reference a theme token with \`var(--color-<name>)\`.`;
+
+      const at = text.indexOf(value, element.offset);
+      const range: [number, number] | null = at === -1 ? null : [at, at + value.length];
+      const fix = range
+        ? { range, text: token ? `var(--color-${token})` : "currentColor" }
+        : undefined;
+
+      results.push(
+        diag(filePath, text, range?.[0] ?? element.offset, message, "no-raw-colors", fix),
+      );
+    }
+  }
+
+  return results;
+}
+
+/** Unwrap a JSX expression container and its quotes around a literal. */
+function literalAttributeValue(raw: string): string | null {
+  let value = raw.trim();
+  if (value.startsWith("{")) value = value.slice(1);
+  if (value.endsWith("}")) value = value.slice(0, -1);
+  value = value.trim();
+
+  const quoted =
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"));
+  if (quoted && value.length >= 2) value = value.slice(1, -1);
+
+  return value.length > 0 ? value : null;
+}
+
 // ─── prefer-design-tokens ───────────────────────────────────────────────────
 
 function checkPreferDesignTokens(text: string, filePath: string): Diagnostic[] {
@@ -517,6 +947,7 @@ export const CUSTOM_RULES: Record<string, RuleCheck> = {
   "no-magic-spacing": checkNoMagicSpacing,
   "detect-conflicts-in-template-literals": checkDetectConflictsInTemplateLiterals,
   "prefer-design-tokens": checkPreferDesignTokens,
+  "no-raw-colors": checkNoRawColors,
 };
 
 export function runCustomRules(
