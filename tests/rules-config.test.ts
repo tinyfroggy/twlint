@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { RULE_CATALOG, RULE_IDS } from "../src/rules/catalog.js";
-import { resolveConfig } from "../src/rules/config.js";
+import { configWarnings, resolveConfig } from "../src/rules/config.js";
 import { runRules } from "../src/rules/run.js";
 
 describe("rule catalog", () => {
@@ -52,6 +52,33 @@ describe("resolveConfig", () => {
     });
     expect(resolved.unknownRules).toContain("not-a-rule");
     expect(resolved.invalidRules).toContain("no-raw-colors");
+  });
+});
+
+describe("configWarnings", () => {
+  it("suggests the closest rule id for a typo", () => {
+    const warnings = configWarnings(resolveConfig({ rules: { "no-magic-spcing": "error" } }));
+    expect(warnings).toEqual(['Unknown rule "no-magic-spcing". Did you mean "no-magic-spacing"?']);
+  });
+
+  it("points at `--rules` when nothing is close", () => {
+    const warnings = configWarnings(resolveConfig({ rules: { totally_unrelated: "warn" } }));
+    expect(warnings[0]).toContain('Unknown rule "totally_unrelated".');
+    expect(warnings[0]).toContain("twlinter --rules");
+  });
+
+  it("explains an invalid severity", () => {
+    const warnings = configWarnings(
+      // @ts-expect-error deliberately invalid severity
+      resolveConfig({ rules: { "no-raw-colors": "loud" } }),
+    );
+    expect(warnings).toEqual([
+      'Invalid setting for rule "no-raw-colors". Use "off", "warn", "error", false, or ["warn"|"error", options].',
+    ]);
+  });
+
+  it("stays silent for a valid config", () => {
+    expect(configWarnings(resolveConfig({ rules: { "no-raw-colors": "off" } }))).toEqual([]);
   });
 });
 

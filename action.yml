@@ -8,9 +8,11 @@ branding:
 
 inputs:
   version:
-    description: twlinter version or dist-tag to run
+    description: >-
+      twlinter version or dist-tag to run. Pinned by default for reproducible
+      results; set to "latest" to always use the newest release.
     required: false
-    default: latest
+    default: "0.7.0"
   args:
     description: Additional arguments passed to the twlinter CLI
     required: false
@@ -26,4 +28,9 @@ runs:
     - name: Run twlinter
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: npx --yes twlinter@${{ inputs.version }} ${{ inputs.args }}
+      env:
+        TWLINTER_VERSION: ${{ inputs.version }}
+        TWLINTER_ARGS: ${{ inputs.args }}
+      run: |
+        read -r -a twlinter_args <<< "$TWLINTER_ARGS" || true
+        npx --yes "twlinter@$TWLINTER_VERSION" "${twlinter_args[@]}"

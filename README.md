@@ -1,26 +1,110 @@
 # twlinter
 
-A zero-config Tailwind CSS linter for v3 and v4 projects.
+**The Tailwind CSS linter that finds every non-canonical class and tells you
+exactly what to replace it with.**
+
+```text
+h-[350px]                                      →  h-87.5
+text-sm leading-5                              →  text-sm/5
+overflow-hidden text-ellipsis whitespace-nowrap →  truncate
+```
+
+Zero config. Tailwind v3 + v4. CLI + ESLint + Oxlint.
+
+```bash
+npx twlinter@latest
+```
 
 [![npm version](https://img.shields.io/npm/v/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
 [![npm downloads](https://img.shields.io/npm/dt/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
 [![license](https://img.shields.io/npm/l/twlinter?style=flat&colorA=000000&colorB=0f766e)](./LICENSE)
 
-Your Tailwind classes are not canonical. twlinter finds every one, then fixes
-them.
+![twlinter scanning a file, reporting non-canonical classes, and applying --fix](./assets/twlinter-demo.gif)
 
-One command scans a project and reports non-canonical Tailwind classes with
-source locations and concrete replacements:
+[Watch the full-quality video (MP4)](./assets/twlinter-demo.mp4)
+
+> Repository: [`twlint`](https://github.com/tinyfroggy/twlint) · npm package:
+> [`twlinter`](https://www.npmjs.com/package/twlinter) · CLI: `twlinter`
+
+## Why twlinter?
+
+Tailwind has many ways to write the same thing. twlinter finds the
+non-canonical ones, reports each with a source location, and names the exact
+replacement — then can apply the fixes in place.
+
+### Canonical classes
 
 ```text
-  ⚠ The class `h-[350px]` can be written as `h-87.5`
-    src/app.tsx:12
-
-Found 1 warning. Scanned 18 files in 45ms.
+h-[350px]  →  h-87.5
 ```
 
-Every custom rule also ships as an Oxlint/ESLint plugin, so the same checks run
-inside your editor and in CI.
+Classes with a simpler form on the theme scale are rewritten as the canonical
+utility.
+
+### Shorthand
+
+```text
+overflow-hidden text-ellipsis whitespace-nowrap  →  truncate
+```
+
+Class lists that collapse to fewer utilities are reported as one suggestion.
+
+### Design tokens
+
+```text
+bg-[#121212]  →  bg-background
+bg-pink-500   →  bg-primary
+```
+
+Raw hex values and built-in palette colors are flagged in favor of the theme
+tokens the project actually declares.
+
+### Unknown classes
+
+```text
+rounded-huge  →  did you mean `rounded-full`?
+```
+
+Classes Tailwind cannot generate are reported with a spelling suggestion, so
+silent no-op CSS does not ship.
+
+### Duplicates, conflicts, and magic values
+
+```text
+p-4 p-4            →  p-4
+block hidden       →  pick one
+top-[-5px]         →  -top-[5px]
+w-[13px]           →  w-3.25
+```
+
+### Auto-fix
+
+Every fixable finding can be written back to your files:
+
+```bash
+npx twlinter@latest --fix
+```
+
+### The same rules in your editor
+
+Every rule ships as an ESLint/Oxlint plugin, so the checks run in your editor
+and in CI, not just on the command line. See
+[the plugin](#oxlint-and-eslint-plugin).
+
+## Compatibility
+
+| Check | Tailwind v3 | Tailwind v4 |
+| --- | :---: | :---: |
+| Custom rules (11) | ✅ | ✅ |
+| `no-unknown-classes` | ✅ | ✅ |
+| `cssConflict` | ✅ | ✅ |
+| `suggestCanonicalClasses` | — | ✅ |
+| `shorthand-classes` | — | ✅ |
+| `usedBlocklistedClass` | — | ✅ |
+
+twlinter detects the Tailwind version from your installed `tailwindcss`
+package. On v3 it reads `tailwind.config.*` (or the v3 defaults); on v4 it
+reads the CSS entry that imports `tailwindcss`.
 
 ## Table of contents
 
@@ -33,33 +117,11 @@ inside your editor and in CI.
 - [Oxlint and ESLint plugin](#oxlint-and-eslint-plugin)
 - [Output](#output)
 - [Continuous integration](#continuous-integration)
+- [For coding agents](#for-coding-agents)
 - [Credits](#credits)
 - [Development](#development)
 
 ## Quickstart
-
-Give your coding agent this prompt:
-
-```text
-Read https://github.com/tinyfroggy/twlint/blob/main/SETUP.md
-and set up twlinter in this project.
-```
-
-Or just run it yourself:
-
-```bash
-npx twlinter@latest
-```
-
-![twlinter scanning a file, reporting non-canonical classes, and applying --fix](./assets/twlinter-demo.gif)
-
-[Watch the full-quality video (MP4)](./assets/twlinter-demo.mp4)
-
-Once installed, [choose your rules](#rules) or leave the defaults. Prefer to
-wire it up by hand? See [Usage](#usage) and the
-[plugin](#oxlint-and-eslint-plugin).
-
-## Usage
 
 Run it from the root of your project:
 
@@ -67,25 +129,25 @@ Run it from the root of your project:
 npx twlinter@latest
 ```
 
-That scans the current project and prints the default terminal report. For the
-same report as structured JSON:
+Once installed, [choose your rules](#rules) or leave the defaults. Prefer to
+wire it up by hand? See [Usage](#usage) and the
+[plugin](#oxlint-and-eslint-plugin).
+
+## Usage
+
+That command scans the current project and prints the default terminal report.
+For the same report as structured JSON:
 
 ```bash
 npx twlinter@latest --json
 ```
 
-For problems with a concrete replacement, apply the fixes in place:
+For problems with a concrete replacement, apply the fixes in place (each file
+is written atomically):
 
 ```bash
 npx twlinter@latest --fix
 ```
-
-twlinter detects the Tailwind CSS version from the project's installed
-`tailwindcss` package.
-
-- **v4** projects are read from a CSS entry that imports `tailwindcss`.
-- **v3** projects are read from `tailwind.config.*`, or the v3 defaults when
-  there is no config file.
 
 ## Commands
 
@@ -105,6 +167,12 @@ entry, how many theme colors were read, and a per-rule status — `active`, `off
 or `skipped` with the reason. `--explain` does the same for a real scan, so a
 rule that produced nothing tells you whether it ran, was disabled, or was
 skipped.
+
+`--explain` writes to **stderr**, so machine-readable output stays clean:
+
+```bash
+twlinter --json --explain > result.json   # result.json is valid JSON
+```
 
 ```text
 $ twlinter --doctor
@@ -137,6 +205,14 @@ A rule accepts `"off" | "warn" | "error"`, `false`, or
 disable one. The same ids are used by the [plugin](#oxlint-and-eslint-plugin),
 so `"no-magic-spacing": "off"` and `"twlinter/no-magic-spacing": "off"` mean the
 same thing.
+
+A rule id that does not exist (usually a typo) is reported with a suggestion on
+stderr, and an invalid severity is called out instead of being ignored:
+
+```text
+twlinter: Unknown rule "no-magic-spcing". Did you mean "no-magic-spacing"?
+twlinter: Invalid setting for rule "no-raw-colors". Use "off", "warn", "error", false, or ["warn"|"error", options].
+```
 
 ## Rules
 
@@ -178,6 +254,8 @@ The CLI also runs Tailwind's language service, which needs the design system:
 ## How rules run
 
 ### Version support
+
+See the [compatibility table](#compatibility) for the summary.
 
 - **Every custom rule** runs on Tailwind v3 and v4.
 - `cssConflict` and `no-unknown-classes` run on both v3 and v4.
@@ -330,10 +408,22 @@ Run the CLI in a workflow. It exits with code `1` when it finds issues:
 - run: npx twlinter@latest
 ```
 
-Or use the bundled action:
+Or use the bundled action. It runs a pinned twlinter version by default for
+reproducible results; pass `version: latest` to follow releases:
 
 ```yaml
 - uses: tinyfroggy/twlint@v1
+  with:
+    version: latest
+```
+
+## For coding agents
+
+Give your coding agent this prompt:
+
+```text
+Read https://github.com/tinyfroggy/twlint/blob/main/SETUP.md
+and set up twlinter in this project.
 ```
 
 ## Credits
@@ -364,8 +454,8 @@ npm run dev -- --json
 
 Build the publishable package with `npm run build`.
 
-Releases are automated with [Changesets](https://github.com/changesets/changesets):
-add a changeset in a PR, and the release workflow opens a version PR and
-publishes to npm when it merges. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Releases are manual, using [Changesets](https://github.com/changesets/changesets):
+add a changeset in a PR, then run the version and publish steps yourself when
+you want to ship. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 twlinter is open source under the MIT license.

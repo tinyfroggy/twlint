@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -65,5 +65,14 @@ describe("applyFixes", () => {
 
     expect(changed).toBe(0);
     expect(readFileSync(file, "utf8")).toBe("bg-red-500");
+  });
+
+  it("writes atomically and leaves no temp files behind", async () => {
+    const file = tempFile("bg-red-500");
+    const changed = await applyFixes([diagnostic(file, 0, 10, "bg-primary")]);
+
+    expect(changed).toBe(1);
+    expect(readdirSync(path.dirname(file))).toEqual(["sample.tsx"]);
+    expect(readFileSync(file, "utf8")).toBe("bg-primary");
   });
 });
