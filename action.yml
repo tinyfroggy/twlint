@@ -12,7 +12,7 @@ inputs:
       twlinter version or dist-tag to run. Pinned by default for reproducible
       results; set to "latest" to always use the newest release.
     required: false
-    default: "0.7.0"
+    default: "0.8.0"
   args:
     description: Additional arguments passed to the twlinter CLI
     required: false
