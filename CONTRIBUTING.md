@@ -127,9 +127,26 @@ Current pre-commit behavior:
 npm run check
 ```
 
-## Release Notes
+## Releases
 
-Before publishing to npm:
+Releases are automated with [Changesets](https://github.com/changesets/changesets).
+Do not bump `version` in `package.json` by hand.
+
+1. Add a changeset in your PR:
+
+   ```bash
+   npx changeset
+   ```
+
+   Choose `patch`, `minor`, or `major`, and write a short summary. The changeset
+   file is committed with the PR.
+
+2. When the PR merges to `main`, the release workflow opens a **Version
+   Packages** PR that applies the pending bumps and updates `CHANGELOG.md`.
+
+3. Merging that PR publishes to npm with provenance.
+
+Preview a release locally at any time:
 
 ```bash
 npm run check

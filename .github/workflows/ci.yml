@@ -6,9 +6,19 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  check:
+    name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
 
     steps:
       - name: Check out repository
@@ -17,13 +27,24 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run checks
         run: npm run check
 
       - name: Build package
         run: npm run build
+
+  # Stable required-check name for branch protection. The matrix job above
+  # reports as "Node <version>", so this aggregates it under a single check.
+  validate:
+    name: validate
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All matrix checks passed
+        run: echo "All matrix checks passed."

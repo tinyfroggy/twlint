@@ -5,28 +5,18 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { loadDesignSystem } from "./tailwind-design-system.js";
 import { createV3ValidationState } from "./tailwind-v3-state.js";
-import {
-  createState,
-  doValidate,
-  getDefaultTailwindSettings,
-} from "./tailwind-language-service-api.js";
-import { getShorthandClassDiagnostics } from "../core/shorthand-classes.js";
-import { getUnknownClassDiagnostics } from "../core/unknown-classes.js";
+import { createState, getDefaultTailwindSettings } from "./tailwind-language-service-api.js";
 import { createClassKind, createV3ClassKind } from "../core/class-kind.js";
 import { readDeclaredColorTokens } from "../core/theme-tokens.js";
-import { isUndeclaredColorToken, runCustomRules } from "../custom-rules/index.js";
 import { DEFAULT_CLASS_FUNCTIONS } from "../constants.js";
+import { runResolvedRules } from "../rules/run.js";
+import { resolveConfig } from "../rules/config.js";
 
 import type { ClassKind } from "../core/class-kind.js";
 import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
-import type { CandidateInput, Diagnostic, TailwindDiagnostic } from "../types.js";
-import type { CustomRuleOptions } from "../custom-rules/index.js";
-
-const DIAGNOSTIC_KINDS = [
-  "suggestCanonicalClasses",
-  "cssConflict",
-  "usedBlocklistedClass",
-] as const;
+import type { CandidateInput, Diagnostic } from "../types.js";
+import type { RuleRunContext, RunResult } from "../rules/run.js";
+import type { TwlinterConfig } from "../rules/config.js";
 
 /** Project theme context handed to the custom rules. */
 export type ThemeContext = {
@@ -122,63 +112,47 @@ export async function validateCandidate(
   candidate: CandidateInput,
   dependencyPaths?: Iterable<string>,
   theme?: ThemeContext,
+  config?: TwlinterConfig,
 ): Promise<Diagnostic[]> {
+  const result = await validateCandidateWithResult(
+    state,
+    designSystem,
+    candidate,
+    dependencyPaths,
+    theme,
+    config,
+  );
+  return result.diagnostics;
+}
+
+/** Like `validateCandidate`, but also reports which rules ran or were skipped. */
+export async function validateCandidateWithResult(
+  state: ReturnType<typeof createState>,
+  designSystem: unknown,
+  candidate: CandidateInput,
+  dependencyPaths?: Iterable<string>,
+  theme?: ThemeContext,
+  config?: TwlinterConfig,
+): Promise<RunResult> {
   const document = TextDocument.create(
     pathToFileURL(candidate.file).href,
     detectLanguageId(candidate.file),
     1,
     candidate.text,
   );
-  const diagnostics: Diagnostic[] = [];
 
-  const ruleOptions: CustomRuleOptions = {
+  const context: RuleRunContext = {
+    file: candidate.file,
+    text: candidate.text,
+    document,
+    state,
+    designSystem,
+    dependencyPaths,
+    theme,
     tailwindVersion: state?.v4 === false ? 3 : 4,
-    themeColors: theme?.colors,
-    themeFile: theme?.file,
-    resolveColor: theme?.resolveColor,
-    classifyClass: theme?.classifyClass,
   };
 
-  for (const kind of DIAGNOSTIC_KINDS) {
-    try {
-      const rawDiagnostics = (await doValidate(state, document, [kind])) as TailwindDiagnostic[];
-      diagnostics.push(
-        ...rawDiagnostics.map((raw) => ({
-          file: path.relative(process.cwd(), candidate.file),
-          line: raw.range.start.line + 1,
-          column: raw.range.start.character + 1,
-          severity: "warning" as const,
-          rule: typeof raw.code === "string" ? raw.code : "suggestCanonicalClasses",
-          message: raw.message,
-          source: "tw",
-        })),
-      );
-    } catch {
-      // One unsupported Tailwind check should not hide other diagnostics.
-    }
-  }
-
-  try {
-    diagnostics.push(...getShorthandClassDiagnostics(designSystem, document, candidate.file));
-  } catch {
-    // The shorthand check requires a Tailwind v4 design system.
-  }
-
-  try {
-    diagnostics.push(
-      ...getUnknownClassDiagnostics(state, designSystem, document, candidate.file, {
-        dependencyPaths,
-        // `no-raw-colors` owns undeclared color tokens when a theme is readable.
-        ownsColorToken: (token) => isUndeclaredColorToken(token, ruleOptions),
-      }),
-    );
-  } catch {
-    // The existence check requires a Tailwind design system or v3 JIT context.
-  }
-
-  diagnostics.push(...runCustomRules(candidate.text, candidate.file, ruleOptions));
-
-  return diagnostics;
+  return runResolvedRules(context, resolveConfig(config));
 }
 
 function detectLanguageId(file: string): string {

@@ -1,10 +1,14 @@
 import { CUSTOM_RULES } from "./custom-rules/index.js";
+import { RULE_CATALOG } from "./rules/catalog.js";
+import { getDelegatedDiagnostics } from "./plugin/context-delegate.js";
 
-import type { CustomRuleOptions, RuleCheck } from "./custom-rules/index.js";
+import type { NoRawColorsPolicy } from "./custom-rules/index.js";
+import type { RuleMeta } from "./rules/catalog.js";
+import type { Diagnostic } from "./types.js";
 
 export type RuleSeverity = "problem" | "suggestion" | "layout";
 
-export type RuleMeta = {
+export type RuleMetaShape = {
   type: RuleSeverity;
   docs: {
     description: string;
@@ -55,94 +59,8 @@ export type RuleVisitors = {
 };
 
 export type RuleModule = {
-  meta: RuleMeta;
+  meta: RuleMetaShape;
   create(context: RuleContext): RuleVisitors;
-};
-
-const RULES: Record<
-  string,
-  {
-    description: string;
-    type: RuleSeverity;
-    schema?: unknown[];
-    fixable?: "code" | "whitespace";
-    hasSuggestions?: boolean;
-  }
-> = {
-  "no-duplicate-utilities": {
-    description: "Disallow the same utility appearing more than once in one class list.",
-    type: "problem",
-  },
-  "prefer-truncate-shorthand": {
-    description: "Prefer the `truncate` shorthand over its three component utilities.",
-    type: "suggestion",
-  },
-  "no-important-abuse": {
-    description: "Disallow stacking many `!` important utilities in one class list.",
-    type: "suggestion",
-  },
-  "no-sr-only-display-conflict": {
-    description: "Disallow `sr-only` combined with a display utility that overrides it.",
-    type: "problem",
-  },
-  "consistent-negative-arbitrary-values": {
-    description: "Prefer the `-utility-[value]` form over a negative value in brackets.",
-    type: "suggestion",
-  },
-  "require-flex-for-flex-utilities": {
-    description: "Require `flex` or `inline-flex` for flex direction and wrap utilities.",
-    type: "problem",
-  },
-  "prefer-theme-scale": {
-    description: "Prefer Tailwind spacing scale and font-size tokens over arbitrary values.",
-    type: "suggestion",
-  },
-  "no-magic-spacing": {
-    description: "Disallow arbitrary spacing values that land off the spacing scale.",
-    type: "suggestion",
-  },
-  "detect-conflicts-in-template-literals": {
-    description: "Disallow duplicate utilities across parts of a template literal.",
-    type: "problem",
-  },
-  "prefer-design-tokens": {
-    description: "Prefer theme color tokens over raw hex colors in arbitrary values.",
-    type: "suggestion",
-  },
-  "no-raw-colors": {
-    description: "Disallow raw Tailwind palette colors in classes and color attributes.",
-    type: "problem",
-    fixable: "code",
-    hasSuggestions: true,
-    schema: [
-      {
-        type: "object",
-        properties: {
-          allow: { type: "array", items: { type: "string" } },
-          deny: { type: "array", items: { type: "string" } },
-          message: { type: "string" },
-          scanAllStrings: { type: "boolean" },
-          mergeFunctions: { type: "array", items: { type: "string" } },
-          variantFunctions: { type: "array", items: { type: "string" } },
-          contracts: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                pattern: { type: "string" },
-                allow: { type: "array", items: { type: "string" } },
-                deny: { type: "array", items: { type: "string" } },
-                message: { type: "string" },
-              },
-              required: ["pattern"],
-              additionalProperties: false,
-            },
-          },
-        },
-        additionalProperties: false,
-      },
-    ],
-  },
 };
 
 function getSourceCode(context: RuleContext): SourceCode | undefined {
@@ -153,42 +71,49 @@ function getFilename(context: RuleContext): string {
   return context.filename ?? context.getFilename?.() ?? "";
 }
 
-function createRule(name: string, check: RuleCheck): RuleModule {
-  const meta: {
-    description: string;
-    type: RuleSeverity;
-    schema?: unknown[];
-    fixable?: "code" | "whitespace";
-    hasSuggestions?: boolean;
-  } = RULES[name] ?? {
-    description: `twlinter rule ${name}.`,
-    type: "suggestion" as const,
-  };
-
+function metaFor(rule: RuleMeta): RuleMetaShape {
   return {
-    meta: {
-      type: meta.type,
-      docs: {
-        description: meta.description,
-        url: "https://github.com/tinyfroggy/twlint#readme",
-      },
-      schema: meta.schema ?? [],
-      messages: {},
-      ...(meta.fixable ? { fixable: meta.fixable } : {}),
-      ...(meta.hasSuggestions ? { hasSuggestions: true } : {}),
+    type: rule.type,
+    docs: {
+      description: rule.description,
+      url: "https://github.com/tinyfroggy/twlint#readme",
     },
+    schema: rule.schema ?? [],
+    messages: {},
+    ...(rule.fixable ? { fixable: rule.fixable } : {}),
+    ...(rule.hasSuggestions ? { hasSuggestions: true } : {}),
+  };
+}
+
+function runTextRule(rule: RuleMeta, text: string, file: string, options: unknown): Diagnostic[] {
+  const check = CUSTOM_RULES[rule.id];
+  if (!check) return [];
+
+  return check(
+    text,
+    file,
+    rule.id === "no-raw-colors" && options !== undefined
+      ? { noRawColors: options as NoRawColorsPolicy }
+      : undefined,
+  );
+}
+
+function createRule(rule: RuleMeta): RuleModule {
+  return {
+    meta: metaFor(rule),
     create(context) {
       return {
         Program() {
           const sourceCode = getSourceCode(context);
           if (!sourceCode) return;
 
-          let diagnostics;
+          const file = getFilename(context);
+          let diagnostics: Diagnostic[];
           try {
-            const ruleOptions = context.options?.[0] as CustomRuleOptions["noRawColors"];
-            diagnostics = check(sourceCode.getText(), getFilename(context), {
-              noRawColors: ruleOptions ?? undefined,
-            });
+            diagnostics =
+              rule.capability === "text"
+                ? runTextRule(rule, sourceCode.getText(), file, context.options?.[0])
+                : getDelegatedDiagnostics(file, rule.id);
           } catch {
             return;
           }
@@ -224,7 +149,7 @@ function createRule(name: string, check: RuleCheck): RuleModule {
 }
 
 export const rules: Record<string, RuleModule> = Object.fromEntries(
-  Object.entries(CUSTOM_RULES).map(([name, check]) => [name, createRule(name, check)]),
+  RULE_CATALOG.map((rule) => [rule.id, createRule(rule)]),
 );
 
 export const plugin = {
