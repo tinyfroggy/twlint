@@ -3,3 +3,5 @@ dist/
 *.tgz
 .env
 video/
+bun.lock
+bun.lockb
