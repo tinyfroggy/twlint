@@ -129,8 +129,9 @@ npm run check
 
 ## Releases
 
-Releases are automated with [Changesets](https://github.com/changesets/changesets).
-Do not bump `version` in `package.json` by hand.
+Releases are manual, using [Changesets](https://github.com/changesets/changesets).
+Nothing bumps the version or publishes to npm on its own; you run each step when
+you decide to release.
 
 1. Add a changeset in your PR:
 
@@ -141,10 +142,25 @@ Do not bump `version` in `package.json` by hand.
    Choose `patch`, `minor`, or `major`, and write a short summary. The changeset
    file is committed with the PR.
 
-2. When the PR merges to `main`, the release workflow opens a **Version
-   Packages** PR that applies the pending bumps and updates `CHANGELOG.md`.
+2. When you are ready to release, apply the pending changesets locally:
 
-3. Merging that PR publishes to npm with provenance.
+   ```bash
+   npx changeset version
+   ```
+
+   This bumps `version` in `package.json` and updates `CHANGELOG.md`. Commit the
+   result and merge it like any other change.
+
+3. Publish to npm from the updated `main`:
+
+   ```bash
+   npm login
+   npm run release
+   ```
+
+   `npm run release` builds `dist/` and runs `changeset publish`. To publish
+   with provenance, set `NPM_CONFIG_PROVENANCE=true` and run it from a CI job
+   that has `id-token: write` and a configured `NODE_AUTH_TOKEN`.
 
 Preview a release locally at any time:
 
