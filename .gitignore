@@ -3,4 +3,3 @@ dist/
 *.tgz
 .env
 video/
-*.mp4
