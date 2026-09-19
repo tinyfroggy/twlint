@@ -1,12 +1,19 @@
 import type { Diagnostic, LintResult } from "../types.js";
 
 export function renderJson(result: LintResult): string {
+  const errors = result.diagnostics.filter((d) => d.severity === "error").length;
+
   const payload = {
     summary: {
       matchedFiles: result.matchedFiles,
       scannedFiles: result.scannedFiles,
       elapsedMilliseconds: result.elapsedMilliseconds,
-      warningCount: result.diagnostics.length,
+      errorCount: errors,
+      warningCount: result.diagnostics.length - errors,
+    },
+    rules: {
+      ran: result.ranRules ?? [],
+      skipped: result.skippedRules ?? [],
     },
     diagnostics: result.diagnostics.map((d: Diagnostic) => ({
       file: d.file,

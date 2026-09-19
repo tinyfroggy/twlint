@@ -3,25 +3,38 @@ import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
 import os from "node:os";
 
-import { createValidationState, validateCandidate } from "../adapters/tailwind-language-service.js";
+import {
+  createValidationState,
+  validateCandidateWithResult,
+} from "../adapters/tailwind-language-service.js";
 import { applyFixes } from "./apply-fixes.js";
 import { mightContainTailwindClasses } from "../discovery/file-relevance.js";
 import { resolveTailwindProject } from "../discovery/resolve-tailwind-project.js";
 import { resolveProjectInputFiles } from "../discovery/resolve-inputs.js";
 
 import type { TailwindProject } from "../discovery/resolve-tailwind-project.js";
-import type { CandidateInput, Diagnostic, LintResult } from "../types.js";
+import type { CandidateInput, Diagnostic, LintResult, SkippedRule } from "../types.js";
+import type { TwlinterConfig } from "../rules/config.js";
 import { MAX_FILE_SIZE_BYTES } from "../constants.js";
 
 export type LintOptions = {
   /** Apply machine-applicable fixes and re-scan. */
   fix?: boolean;
+  /** Rule configuration (on/off, severity, options). */
+  config?: TwlinterConfig;
+};
+
+type ScanResult = {
+  diagnostics: Diagnostic[];
+  ran: string[];
+  skipped: SkippedRule[];
 };
 
 export async function lintProject(options: LintOptions = {}): Promise<LintResult> {
   const startedAt = performance.now();
   const rootDir = process.cwd();
-  const entries = await resolveProjectInputFiles();
+  const config = options.config;
+  const entries = await resolveProjectInputFiles(config?.files, config?.ignore);
 
   if (entries.length === 0) {
     return {
@@ -29,19 +42,21 @@ export async function lintProject(options: LintOptions = {}): Promise<LintResult
       scannedFiles: 0,
       elapsedMilliseconds: performance.now() - startedAt,
       diagnostics: [],
+      skippedRules: [],
+      ranRules: [],
     };
   }
 
   const project = await resolveTailwindProject(rootDir);
   let candidates = await collectCandidateInputs(entries);
-  let diagnostics = await validateCandidates(project, candidates);
+  let scan = await validateCandidates(project, candidates, config);
 
-  if (options.fix && (await applyFixes(diagnostics)) > 0) {
+  if (options.fix && (await applyFixes(scan.diagnostics)) > 0) {
     candidates = await collectCandidateInputs(entries);
-    diagnostics = await validateCandidates(project, candidates);
+    scan = await validateCandidates(project, candidates, config);
   }
 
-  diagnostics.sort((a, b) => {
+  scan.diagnostics.sort((a, b) => {
     return a.file.localeCompare(b.file) || a.line - b.line || a.column - b.column;
   });
 
@@ -49,21 +64,86 @@ export async function lintProject(options: LintOptions = {}): Promise<LintResult
     matchedFiles: entries.length,
     scannedFiles: candidates.length,
     elapsedMilliseconds: performance.now() - startedAt,
-    diagnostics,
+    diagnostics: scan.diagnostics,
+    skippedRules: scan.skipped,
+    ranRules: scan.ran,
   };
 }
 
-async function safeValidate(
-  validation: Awaited<ReturnType<typeof createValidationState>>,
-  candidate: CandidateInput,
-) {
-  return await validateCandidate(
-    validation.state,
-    validation.designSystem,
-    candidate,
-    validation.dependencyPaths,
-    validation.theme,
+async function validateCandidates(
+  project: TailwindProject,
+  candidates: CandidateInput[],
+  config?: TwlinterConfig,
+): Promise<ScanResult> {
+  const numWorkers = Math.min(
+    os.availableParallelism?.() ?? os.cpus().length,
+    4,
+    Math.min(4, candidates.length),
   );
+
+  if (numWorkers <= 1) {
+    const { state, designSystem, dependencyPaths, theme } = await createValidationState(project);
+    const diagnostics: Diagnostic[] = [];
+    const ran = new Set<string>();
+    const skipped = new Map<string, SkippedRule>();
+
+    for (const candidate of candidates) {
+      try {
+        const result = await validateCandidateWithResult(
+          state,
+          designSystem,
+          candidate,
+          dependencyPaths,
+          theme,
+          config,
+        );
+        diagnostics.push(...result.diagnostics);
+        for (const id of result.ran) ran.add(id);
+        for (const rule of result.skipped) skipped.set(rule.id, rule);
+      } catch {
+        // A single file failure should not hide the rest.
+      }
+    }
+
+    return { diagnostics, ran: [...ran], skipped: [...skipped.values()] };
+  }
+
+  const chunks = distributeArray(candidates, numWorkers);
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
+        workerData: { project, config },
+      });
+
+      const result = await new Promise<ScanResult>((resolve) => {
+        worker.on("message", (message: Partial<ScanResult>) =>
+          resolve({
+            diagnostics: message.diagnostics ?? [],
+            ran: message.ran ?? [],
+            skipped: message.skipped ?? [],
+          }),
+        );
+        worker.on("error", () => resolve({ diagnostics: [], ran: [], skipped: [] }));
+        worker.postMessage(chunk);
+      });
+
+      await worker.terminate();
+      return result;
+    }),
+  );
+
+  const diagnostics: Diagnostic[] = [];
+  const ran = new Set<string>();
+  const skipped = new Map<string, SkippedRule>();
+
+  for (const result of results) {
+    diagnostics.push(...result.diagnostics);
+    for (const id of result.ran) ran.add(id);
+    for (const rule of result.skipped) skipped.set(rule.id, rule);
+  }
+
+  return { diagnostics, ran: [...ran], skipped: [...skipped.values()] };
 }
 
 async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]> {
@@ -84,45 +164,6 @@ async function collectCandidateInputs(files: string[]): Promise<CandidateInput[]
   );
 
   return candidates.filter((candidate): candidate is CandidateInput => candidate !== null);
-}
-
-async function validateCandidates(
-  project: TailwindProject,
-  candidates: CandidateInput[],
-): Promise<Diagnostic[]> {
-  const numWorkers = Math.min(
-    os.availableParallelism?.() ?? os.cpus().length,
-    4,
-    Math.min(4, candidates.length),
-  );
-
-  if (numWorkers <= 1) {
-    const validation = await createValidationState(project);
-    return (
-      await Promise.all(candidates.map((candidate) => safeValidate(validation, candidate)))
-    ).flat();
-  }
-
-  const chunks = distributeArray(candidates, numWorkers);
-
-  const results = await Promise.all(
-    chunks.map(async (chunk) => {
-      const worker = new Worker(new URL("./validation-worker.js", import.meta.url), {
-        workerData: { project },
-      });
-
-      const result = await new Promise<Diagnostic[]>((resolve) => {
-        worker.on("message", resolve);
-        worker.on("error", () => resolve([]));
-        worker.postMessage(chunk);
-      });
-
-      await worker.terminate();
-      return result;
-    }),
-  );
-
-  return results.flat();
 }
 
 function distributeArray<T>(array: T[], n: number): T[][] {

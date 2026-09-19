@@ -21,6 +21,8 @@ function makeResult(diagnostics: Diagnostic[] = []): LintResult {
     scannedFiles: 8,
     elapsedMilliseconds: 123,
     diagnostics,
+    skippedRules: [],
+    ranRules: [],
   };
 }
 
@@ -37,6 +39,7 @@ describe("renderJson", () => {
       matchedFiles: 10,
       scannedFiles: 8,
       elapsedMilliseconds: 123,
+      errorCount: 0,
       warningCount: 2,
     });
   });

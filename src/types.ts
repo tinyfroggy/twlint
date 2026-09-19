@@ -8,7 +8,7 @@ export type Diagnostic = {
   line: number;
   column: number;
   rule: string;
-  severity: "warning";
+  severity: "error" | "warning";
   message: string;
   source: string;
   /** Machine-applicable replacement, when the rule can compute one. */
@@ -17,11 +17,21 @@ export type Diagnostic = {
   suggestions?: string[];
 };
 
+export type SkippedRule = {
+  id: string;
+  severity: "warn" | "error";
+  reason: string;
+};
+
 export type LintResult = {
   matchedFiles: number;
   scannedFiles: number;
   elapsedMilliseconds: number;
   diagnostics: Diagnostic[];
+  /** Rules that could not run, with the reason (e.g. missing design system). */
+  skippedRules: SkippedRule[];
+  /** Rule ids that produced diagnostics. */
+  ranRules: string[];
 };
 
 export type CandidateInput = {

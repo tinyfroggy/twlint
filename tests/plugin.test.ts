@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import plugin, { plugin as namedPlugin, rules } from "../src/plugin.js";
 import { CUSTOM_RULES } from "../src/custom-rules/index.js";
+import { RULE_IDS } from "../src/rules/catalog.js";
 import type { RuleContext, RuleModule } from "../src/plugin.js";
 
 type CapturedReport = {
@@ -36,8 +37,14 @@ describe("plugin", () => {
     expect(namedPlugin).toBe(plugin);
   });
 
-  it("exposes one rule per built-in custom rule", () => {
-    expect(Object.keys(rules).sort()).toEqual(Object.keys(CUSTOM_RULES).sort());
+  it("exposes an ESLint/Oxlint rule for every catalog rule", () => {
+    expect(Object.keys(rules).sort()).toEqual([...RULE_IDS].sort());
+  });
+
+  it("covers every built-in custom rule", () => {
+    for (const id of Object.keys(CUSTOM_RULES)) {
+      expect(rules[id], `missing plugin rule for ${id}`).toBeDefined();
+    }
   });
 
   it("gives every rule documentation and schema metadata", () => {

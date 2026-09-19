@@ -54,12 +54,15 @@ For ESLint, import the plugin and register it the same way. Use the package
 manager that owns the lint config, and preserve existing rules, parsers, and
 ignores.
 
-The plugin covers the custom rules. The CLI also runs Tailwind's language
-service for canonical-class, shorthand, blocklist, and CSS-conflict checks.
-Those need the Tailwind design system, so keep `npx twlinter@latest` in the
-workflow when they matter. On Tailwind v3, the canonical-class, shorthand, and
-blocklist checks are skipped; the CSS-conflict check and every custom rule
-still run.
+Every rule has the same id in the CLI and the plugin, and can be turned on or
+off in either. The custom rules run in-process in the plugin. The language
+service rules (canonical classes, shorthand, blocklist, CSS conflicts, unknown
+classes) need the Tailwind design system: the plugin bridges to the CLI for
+them, which works in Node/ESLint but is blocked by Oxlint's embedded runtime.
+When they matter, keep `npx twlinter@latest` in the workflow, or run
+`twlinter --doctor` to see which rules can run. On Tailwind v3, the
+canonical-class, shorthand, and blocklist checks are skipped; the CSS-conflict
+check and every custom rule still run.
 
 ## Optional: keep it in the project
 

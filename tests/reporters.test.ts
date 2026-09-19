@@ -21,6 +21,8 @@ function makeResult(diagnostics: Diagnostic[] = []): LintResult {
     scannedFiles: 8,
     elapsedMilliseconds: 123,
     diagnostics,
+    skippedRules: [],
+    ranRules: [],
   };
 }
 

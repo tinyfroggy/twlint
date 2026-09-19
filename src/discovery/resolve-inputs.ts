@@ -8,15 +8,21 @@ import {
   DEFAULT_PATTERNS,
 } from "../constants.js";
 
-export async function resolveProjectInputFiles(): Promise<string[]> {
-  const files = await fg(DEFAULT_PATTERNS, {
+export async function resolveProjectInputFiles(
+  files?: string[],
+  ignore?: string[],
+): Promise<string[]> {
+  const patterns = files && files.length > 0 ? files : DEFAULT_PATTERNS;
+  const ignorePatterns = [...DEFAULT_IGNORE_PATTERNS, ...(ignore ?? [])];
+
+  const matched = await fg(patterns, {
     absolute: true,
     dot: false,
     onlyFiles: true,
-    ignore: DEFAULT_IGNORE_PATTERNS,
+    ignore: ignorePatterns,
   });
 
-  return files.filter((file) => !hasIgnoredPathSegment(file));
+  return matched.filter((file) => !hasIgnoredPathSegment(file));
 }
 
 const IGNORED_PATH_SEGMENTS = new Set(DEFAULT_IGNORED_PATH_SEGMENTS);
