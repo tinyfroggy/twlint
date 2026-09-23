@@ -18,6 +18,7 @@ npx twlinter@latest
 [![npm version](https://img.shields.io/npm/v/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
 [![npm downloads](https://img.shields.io/npm/dt/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
 [![license](https://img.shields.io/npm/l/twlinter?style=flat&colorA=000000&colorB=0f766e)](./LICENSE)
+[![skills.sh](https://skills.sh/b/tinyfroggy/twlint)](https://skills.sh/tinyfroggy/twlint)
 
 ![twlinter scanning a file, reporting non-canonical classes, and applying --fix](./assets/twlinter-demo.gif)
 
@@ -25,6 +26,17 @@ npx twlinter@latest
 
 > Repository: [`twlint`](https://github.com/tinyfroggy/twlint) · npm package:
 > [`twlinter`](https://www.npmjs.com/package/twlinter) · CLI: `twlinter`
+
+## Install with an agent skill
+
+```bash
+npx skills add tinyfroggy/twlint --skill install-twlinter
+```
+
+Then ask your coding agent to set up twlinter in the current repository. The
+skill inspects the project, detects the Tailwind version, runs the scan, and
+fixes the reported classes. See [For coding agents](#for-coding-agents) for the
+prompt-only path.
 
 ## Why twlinter?
 
@@ -109,6 +121,7 @@ reads the CSS entry that imports `tailwindcss`.
 ## Table of contents
 
 - [Quickstart](#quickstart)
+- [Install with an agent skill](#install-with-an-agent-skill)
 - [Usage](#usage)
 - [Commands](#commands)
 - [Configuration](#configuration)
@@ -419,7 +432,11 @@ reproducible results; pass `version: latest` to follow releases:
 
 ## For coding agents
 
-Give your coding agent this prompt:
+Install the bundled skill, or give your coding agent this prompt:
+
+```bash
+npx skills add tinyfroggy/twlint --skill install-twlinter
+```
 
 ```text
 Read https://github.com/tinyfroggy/twlint/blob/main/SETUP.md
