@@ -60,9 +60,9 @@ service rules (canonical classes, shorthand, blocklist, CSS conflicts, unknown
 classes) need the Tailwind design system: the plugin bridges to the CLI for
 them, which works in Node/ESLint but is blocked by Oxlint's embedded runtime.
 When they matter, keep `npx twlinter@latest` in the workflow, or run
-`twlinter --doctor` to see which rules can run. On Tailwind v3, the
-canonical-class, shorthand, and blocklist checks are skipped; the CSS-conflict
-check and every custom rule still run.
+`twlinter --doctor` to see which rules can run. On Tailwind v3, the shorthand
+check is skipped; the canonical-class, blocklist, and CSS-conflict checks and
+every custom rule still run.
 
 ## Optional: keep it in the project
 

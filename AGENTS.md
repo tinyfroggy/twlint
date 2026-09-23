@@ -23,9 +23,9 @@ Run `npm run check` before finishing any change. It must pass.
 - Keep the CLI zero-config. Do not add a required config file.
 - A behavior change needs a test. See `tests/`.
 - Adding a rule: implement it in `src/custom-rules/index.ts`, register it in
-  `CUSTOM_RULES`, and add tests. The plugin picks it up automatically.
-- Prefer the helpers in `src/custom-rules/utils.ts` and
-  `src/custom-rules/context.ts` over ad-hoc parsing.
+  `CUSTOM_RULES`, add its metadata to `src/rules/catalog.ts`, and add tests. The
+  plugin picks it up automatically.
+- Prefer the helpers in `src/custom-rules/utils.ts` over ad-hoc parsing.
 - Do not bump `version` or edit `CHANGELOG.md` by hand. Releases use
   [Changesets](./.changeset/README.md); add a changeset with `npx changeset`.
 
