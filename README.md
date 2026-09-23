@@ -110,9 +110,9 @@ and in CI, not just on the command line. See
 | Custom rules (11) | ✅ | ✅ |
 | `no-unknown-classes` | ✅ | ✅ |
 | `cssConflict` | ✅ | ✅ |
-| `suggestCanonicalClasses` | — | ✅ |
+| `suggestCanonicalClasses` | ✅ | ✅ |
+| `usedBlocklistedClass` | ✅ | ✅ |
 | `shorthand-classes` | — | ✅ |
-| `usedBlocklistedClass` | — | ✅ |
 
 twlinter detects the Tailwind version from your installed `tailwindcss`
 package. On v3 it reads `tailwind.config.*` (or the v3 defaults); on v4 it
@@ -189,19 +189,22 @@ twlinter --json --explain > result.json   # result.json is valid JSON
 
 ```text
 $ twlinter --doctor
-Tailwind      v4.3.3   entry: src/index.css
-Design system loaded   theme colors: 42   dependencies: 5
+twlinter doctor
+
+Project        .
+Tailwind       v4.3.3   entry: src/index.css
+Design system  loaded   theme colors: 42   dependencies: 5
 
   no-raw-colors              text                 active
   no-unknown-classes         design-system-or-v3  active
-  usedBlocklistedClass       design-system-or-v3  skipped  no blocklist in config
+  usedBlocklistedClass       design-system-or-v3  active
 ```
 
 ## Configuration
 
 twlinter is zero-config: with no config file every rule runs at its default
 severity. To change that, add `twlinter.config.json`, `.twlintrc.json`,
-`.twlintrc`, or a `twlinter` key in `package.json`:
+`.twlintrc`, `twlinter.json`, or a `twlinter` key in `package.json`:
 
 ```json
 {
@@ -271,16 +274,17 @@ The CLI also runs Tailwind's language service, which needs the design system:
 See the [compatibility table](#compatibility) for the summary.
 
 - **Every custom rule** runs on Tailwind v3 and v4.
-- `cssConflict` and `no-unknown-classes` run on both v3 and v4.
-- `suggestCanonicalClasses`, `shorthand-classes`, and `usedBlocklistedClass`
-  rely on the v4 design system and are skipped on v3.
+- `suggestCanonicalClasses`, `cssConflict`, `usedBlocklistedClass`, and
+  `no-unknown-classes` run on both v3 and v4.
+- `shorthand-classes` relies on the v4 design system and is skipped on v3.
 - On v3, the spacing-scale rules only suggest class names that exist on the v3
   scale; the plugin keeps v4 behavior unless it delegates to the CLI.
 
 ### Where classes are found
 
 `no-unknown-classes` reads classes on elements and in `cn`-style helpers (`cn`,
-`clsx`, `cx`, `classnames`, `twMerge`, `twJoin`, `tw`). It accepts Tailwind
+`clsx`, `cx`, `classnames`, `classNames`, `cva`, `tv`, `twMerge`, `twJoin`,
+`tw`). It accepts Tailwind
 utilities, `@utility` names, and plain class selectors from the theme's CSS
 import graph, and reports anything else with a spelling suggestion when one is
 close.
@@ -425,7 +429,7 @@ Or use the bundled action. It runs a pinned twlinter version by default for
 reproducible results; pass `version: latest` to follow releases:
 
 ```yaml
-- uses: tinyfroggy/twlint@v1
+- uses: tinyfroggy/twlint@v0.8.0
   with:
     version: latest
 ```

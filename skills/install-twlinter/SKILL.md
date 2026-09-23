@@ -44,7 +44,7 @@ Review the diff after `--fix`: some findings (omitted fields, which side of a
 conflict to keep) need a human decision and are not auto-fixed. For a
 machine-readable report use `--json`. When a rule reports nothing, `--doctor`
 and `--explain` show whether it ran, was turned off, or was skipped — for
-example the v4-only rules on Tailwind v3.
+example `shorthand-classes` on Tailwind v3.
 
 Complete when the scan is clean or every remaining finding has been fixed or
 explained.

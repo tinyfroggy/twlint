@@ -26,43 +26,58 @@ The CLI is a project scanner around Tailwind's language tooling plus a small cus
 
 ```txt
 src/
-  cli.ts                         Commander entrypoint
+  cli.ts                         CLI entrypoint: argument parsing, command dispatch
   plugin.ts                      ESLint/Oxlint plugin entrypoint
+  constants.ts                   Default globs, ignore patterns, class-helper names
+  types.ts                       Shared diagnostic and result types
   core/lint-project.ts           File discovery, worker orchestration, result sorting
   core/validation-worker.ts      Parallel validation worker
-  adapters/                      Tailwind language service and design-system adapters
+  core/doctor.ts                 Project and rule status for --doctor and --rules
+  core/apply-fixes.ts            Atomic --fix file writer
+  core/class-kind.ts             Class classification and edit distance
+  core/shorthand-classes.ts      Design-system shorthand checks
+  core/theme-tokens.ts           Declared color-token reading
+  core/unknown-classes.ts        Unknown-class detection and spelling suggestions
+  rules/catalog.ts               Single source of truth for every rule
+  rules/config.ts                Rule severity/option resolution and warnings
+  rules/load-config.ts           Config file and package.json discovery
+  rules/run.ts                   Per-file rule execution and capability gating
   custom-rules/index.ts          Rule registry and rule implementations
-  custom-rules/context.ts        Rule context, component resolution, scoped class helpers
   custom-rules/utils.ts          Class parsing and source extraction
-  component-registry.ts          Built-in/user component registry helpers
-  presets/shadcn.ts              Built-in shadcn/ui component base classes
+  custom-rules/js-sites.ts       JS/TS class sites in helpers and template literals
+  custom-rules/color-data.ts     Color utility parsing tables
+  custom-rules/color-values.ts   Color distance and nearest-token helpers
+  discovery/                     Input, CSS-entry, and Tailwind project resolution
+  adapters/                      Tailwind language service, v3 state, design system
+  reporters/                     Pretty, JSON, and doctor renderers
+  plugin/context-delegate.ts     Plugin-to-CLI bridge for design-system rules
 ```
 
 ## Rule Flow
 
 Custom rules should follow this flow:
 
-1. Extract class-bearing sources with helpers from `custom-rules/utils.ts`.
+1. Extract class-bearing sources with helpers from `custom-rules/utils.ts`
+   (`extractClassLists`, `extractHelperClassLists`,
+   `extractElementsWithClasses`, `extractApplyBlocks`).
 2. Parse class tokens with `parseClassName` instead of hand-splitting variants.
-3. For element-aware rules, call `resolveElementClasses` from `custom-rules/context.ts`.
-4. Check `effectiveClasses`, not only the user-provided class list, when component base classes matter.
-5. Emit diagnostics with the local `diag` helper.
+3. For element-aware rules, iterate `extractElementsWithClasses` and skip
+   component tags.
+4. Emit diagnostics with the local `diag` helper.
+5. Register the check in `CUSTOM_RULES` and add its metadata to `RULE_CATALOG`.
 
-## Component-Aware Rules
+## Element-Aware Rules
 
-Dependency rules such as `require-flex-for-flex-utilities` must be component-aware.
+Some rules depend on the element a class list sits on. `require-flex-for-flex-utilities`,
+for example, needs a `flex` or `inline-flex` base to act on.
 
-The resolver classifies elements as:
+twlinter has no component registry, so it cannot know a component's base classes.
+Element-aware rules therefore skip component tags and reason only about native
+elements. `extractElementsWithClasses` marks component tags with
+`ElementClassList.isComponent`; rules should `continue` on those.
 
-| Kind | Meaning | Diagnostic confidence |
-| ---- | ------- | --------------------- |
-| `native` | Lowercase HTML/SVG element | High |
-| `known-component` | Component found in built-in presets or user config | High |
-| `unknown-component` | Capitalized or member component without known base classes | Low |
-
-Unknown components should not emit hard warnings by default. Use `strict: true` to emit low-confidence warnings.
-
-Do not read component config from mutable globals inside rules. Pass data through `RuleContext`; workers receive the same context as the single-threaded path.
+Do not read shared state from mutable globals inside rules. Pass data through
+`RuleContext`; workers receive the same context as the single-threaded path.
 
 ## Responsive Scope
 
@@ -79,30 +94,21 @@ Use `ParsedClass.responsive` and `hasBaseInScope` when checking whether a depend
 
 ## Adding A Rule
 
-1. Add the rule implementation in `src/custom-rules/index.ts` or a focused helper module if the rule needs shared logic.
-2. Register it in the `CUSTOM_RULES` registry. The CLI runs every entry; `src/plugin.ts` exposes each entry to ESLint/Oxlint automatically.
-3. Add tests in `tests/custom-rules.test.ts`, and cover the plugin adapter in `tests/plugin.test.ts` when the shape changes.
+1. Add the rule implementation in `src/custom-rules/index.ts`, or a focused helper module if the rule needs shared logic.
+2. Register the check in the `CUSTOM_RULES` registry in `src/custom-rules/index.ts`.
+3. Add its metadata (id, description, default severity, capability) to `RULE_CATALOG` in `src/rules/catalog.ts`. This is the single source of truth: the CLI only runs catalogued rules, and `src/plugin.ts` exposes each entry to ESLint/Oxlint automatically.
+4. Add tests in `tests/custom-rules.test.ts`, and cover the plugin adapter in `tests/plugin.test.ts` when the shape changes.
 
 For element-aware rules, prefer `extractElementsWithClasses` over raw regexes. It supports native tags, component tags, and JSX member tags such as `Dialog.Footer`.
 
-## Adding Component Presets
-
-Built-in presets live in `src/presets/shadcn.ts`.
-
-Add the component's always-present classes only. Conditional variant classes can be added later when the rule engine models conditional branches; dependency rules should only treat always-present base classes as reliable.
-
-Flat named exports such as `DialogFooter` can point to compound names such as `Dialog.Footer` through the alias map at the bottom of the preset file.
-
 ## Testing Expectations
 
-Behavior changes need focused tests. For component-aware rules, include:
+Behavior changes need focused tests. Cover:
 
-1. Native element warning.
-2. Known component pass.
-3. Known component warning when base classes do not provide the dependency.
-4. Unknown component skipped by default.
-5. Unknown component warning in strict mode.
-6. Responsive scope edge cases.
+1. The positive case that should be reported.
+2. The near-miss that should stay clean.
+3. Variant and responsive scope edge cases.
+4. Component tags being skipped by element-aware rules.
 
 Before opening a PR, run:
 
