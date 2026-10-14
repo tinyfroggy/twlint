@@ -17,6 +17,7 @@ npx twlinter@latest
 
 [![npm version](https://img.shields.io/npm/v/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
 [![npm downloads](https://img.shields.io/npm/dt/twlinter?style=flat&colorA=000000&colorB=0f766e)](https://www.npmjs.com/package/twlinter)
+[![Socket Security](https://socket.dev/api/badge/npm/package/twlinter)](https://socket.dev/npm/package/twlinter)
 [![license](https://img.shields.io/npm/l/twlinter?style=flat&colorA=000000&colorB=0f766e)](./LICENSE)
 [![skills.sh](https://skills.sh/b/tinyfroggy/twlint)](https://skills.sh/tinyfroggy/twlint)
 

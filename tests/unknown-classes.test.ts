@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TextDocument } from "vscode-languageserver-textdocument";
+import { TextDocument } from "../src/core/text-document.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";

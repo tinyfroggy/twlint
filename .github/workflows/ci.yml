@@ -36,6 +36,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production dependencies
+        # Fails on criticals. Two high-severity advisories remain via
+        # `@tailwindcss/language-service` -> `braces`, which has no patched
+        # release upstream; `postcss`, `postcss-selector-parser`, and
+        # `source-map-js` are pinned to patched versions via `overrides`.
+        run: npm audit --omit=dev --audit-level=critical
+
       - name: Run checks
         run: npm run check
 

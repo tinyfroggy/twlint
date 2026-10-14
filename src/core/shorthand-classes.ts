@@ -1,5 +1,5 @@
 import path from "node:path";
-import { TextDocument } from "vscode-languageserver-textdocument";
+import { TextDocument } from "../core/text-document.js";
 
 import type { Diagnostic } from "../types.js";
 

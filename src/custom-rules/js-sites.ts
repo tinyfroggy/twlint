@@ -1,7 +1,5 @@
 import { parse } from "@babel/parser";
 
-import * as t from "@babel/types";
-
 import { VARIANT_CLASS_FUNCTIONS } from "./utils.js";
 
 import type { ExtractedClassList } from "./utils.js";
@@ -11,6 +9,19 @@ export type JsClassSite = ExtractedClassList & {
   /** Source range of each class token, for editor fixes. */
   ranges?: Map<string, [number, number]>;
 };
+
+/**
+ * Minimal Babel AST node shape. Structural checks replace the
+ * `@babel/types` helpers so the package does not need that direct
+ * dependency (`@babel/parser` still provides the parser itself).
+ */
+type Node = {
+  type: string;
+  start?: number | null;
+  [key: string]: unknown;
+};
+
+type FileNode = Node & { program?: unknown };
 
 const JS_EXTENSIONS = new Set([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]);
 
@@ -31,14 +42,14 @@ const PARSE_OPTIONS = [
   { sourceType: "unambiguous" as const, plugins: [] as const },
 ];
 
-function parseProgram(text: string): t.File | null {
+function parseProgram(text: string): FileNode | null {
   for (const options of PARSE_OPTIONS) {
     try {
       return parse(text, {
         sourceType: options.sourceType,
         plugins: [...options.plugins],
         errorRecovery: true,
-      });
+      }) as unknown as FileNode;
     } catch {
       // Try the next plugin combination.
     }
@@ -46,7 +57,7 @@ function parseProgram(text: string): t.File | null {
   return null;
 }
 
-function isNode(value: unknown): value is t.Node {
+function isNode(value: unknown): value is Node {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -54,9 +65,25 @@ function isNode(value: unknown): value is t.Node {
   );
 }
 
+function isType(node: Node | null | undefined, type: string): boolean {
+  return node?.type === type;
+}
+
+function asNode(value: unknown): Node | null {
+  return isNode(value) ? value : null;
+}
+
+function nodeName(node: Node): string | null {
+  return typeof node.name === "string" ? (node.name as string) : null;
+}
+
+function nodeValue(node: Node): string | null {
+  return typeof node.value === "string" ? (node.value as string) : null;
+}
+
 const SKIP_KEYS = new Set(["loc", "start", "end", "leadingComments", "trailingComments", "extra"]);
 
-function walk(node: t.Node, visit: (node: t.Node) => void): void {
+function walk(node: Node, visit: (node: Node) => void): void {
   visit(node);
 
   const record = node as unknown as Record<string, unknown>;
@@ -73,200 +100,250 @@ function walk(node: t.Node, visit: (node: t.Node) => void): void {
   }
 }
 
-function staticKeyName(node: t.Node | null | undefined): string | null {
+function staticKeyName(node: Node | null | undefined): string | null {
   if (!node) return null;
-  if (t.isIdentifier(node)) return node.name;
-  if (t.isStringLiteral(node)) return node.value;
+  if (isType(node, "Identifier")) return nodeName(node);
+  if (isType(node, "StringLiteral")) return nodeValue(node);
   return null;
 }
 
 function resolveLiterals(
-  node: t.Node | null | undefined,
-  bindings: Map<string, t.Node>,
+  node: Node | null | undefined,
+  bindings: Map<string, Node>,
   seen: Set<string>,
   functions: Set<string>,
 ): Literal[] {
   if (!node) return [];
 
-  if (t.isStringLiteral(node)) {
-    return [{ offset: node.start ?? -1, value: node.value }];
+  if (isType(node, "StringLiteral")) {
+    const value = nodeValue(node);
+    if (value === null) return [];
+    return [{ offset: node.start ?? -1, value }];
   }
 
-  if (t.isTemplateLiteral(node)) {
-    return node.quasis
-      .filter((quasi) => typeof quasi.value.cooked === "string")
-      .map((quasi) => ({ offset: quasi.start ?? -1, value: quasi.value.cooked ?? "" }));
+  if (isType(node, "TemplateLiteral")) {
+    const quasis = node.quasis;
+    if (!Array.isArray(quasis)) return [];
+    return quasis.flatMap((quasi) => {
+      if (!isNode(quasi)) return [];
+      const value = (quasi.value as { cooked?: unknown } | undefined)?.cooked;
+      if (typeof value !== "string") return [];
+      return [{ offset: quasi.start ?? -1, value }];
+    });
   }
 
-  if (t.isIdentifier(node)) {
-    if (seen.has(node.name)) return [];
-    const init = bindings.get(node.name);
+  if (isType(node, "Identifier")) {
+    const name = nodeName(node);
+    if (!name) return [];
+    if (seen.has(name)) return [];
+    const init = bindings.get(name);
     if (!init) return [];
-    seen.add(node.name);
+    seen.add(name);
     const resolved = resolveLiterals(init, bindings, seen, functions);
-    seen.delete(node.name);
+    seen.delete(name);
     return resolved;
   }
 
   if (
-    t.isParenthesizedExpression(node) ||
-    t.isTSAsExpression(node) ||
-    t.isTSSatisfiesExpression(node) ||
-    t.isTSNonNullExpression(node) ||
-    t.isTSTypeAssertion(node) ||
-    t.isTypeCastExpression(node)
+    isType(node, "ParenthesizedExpression") ||
+    isType(node, "TSAsExpression") ||
+    isType(node, "TSSatisfiesExpression") ||
+    isType(node, "TSNonNullExpression") ||
+    isType(node, "TSTypeAssertion") ||
+    isType(node, "TypeCastExpression")
   ) {
-    return resolveLiterals(node.expression, bindings, seen, functions);
+    return resolveLiterals(asNode(node.expression), bindings, seen, functions);
   }
 
-  if (t.isLogicalExpression(node) || t.isBinaryExpression(node)) {
+  if (isType(node, "LogicalExpression") || isType(node, "BinaryExpression")) {
     const operator = node.operator;
     if (operator === "||" || operator === "??" || operator === "&&") {
       return [
-        ...resolveLiterals(node.left, bindings, seen, functions),
-        ...resolveLiterals(node.right, bindings, seen, functions),
+        ...resolveLiterals(asNode(node.left), bindings, seen, functions),
+        ...resolveLiterals(asNode(node.right), bindings, seen, functions),
       ];
     }
     return [];
   }
 
-  if (t.isConditionalExpression(node)) {
+  if (isType(node, "ConditionalExpression")) {
     return [
-      ...resolveLiterals(node.consequent, bindings, seen, functions),
-      ...resolveLiterals(node.alternate, bindings, seen, functions),
+      ...resolveLiterals(asNode(node.consequent), bindings, seen, functions),
+      ...resolveLiterals(asNode(node.alternate), bindings, seen, functions),
     ];
   }
 
-  if (t.isArrayExpression(node)) {
-    return node.elements.flatMap((element) =>
-      element && !t.isSpreadElement(element)
+  if (isType(node, "ArrayExpression")) {
+    const elements = node.elements;
+    if (!Array.isArray(elements)) return [];
+    return elements.flatMap((element) =>
+      isNode(element) && !isType(element, "SpreadElement")
         ? resolveLiterals(element, bindings, seen, functions)
         : [],
     );
   }
 
-  if (t.isObjectExpression(node)) {
+  if (isType(node, "ObjectExpression")) {
     return resolveObjectLiterals(node, bindings, seen, functions);
   }
 
-  if (t.isCallExpression(node) || t.isOptionalCallExpression(node)) {
-    const callee = node.callee;
-    if (t.isIdentifier(callee) && functions.has(callee.name)) {
-      return node.arguments.flatMap((argument) =>
-        t.isArgumentPlaceholder(argument)
-          ? []
-          : resolveLiterals(argument, bindings, seen, functions),
+  if (isType(node, "CallExpression") || isType(node, "OptionalCallExpression")) {
+    const callee = asNode(node.callee);
+    const calleeName = callee && isType(callee, "Identifier") ? nodeName(callee) : null;
+    if (calleeName && functions.has(calleeName)) {
+      const args = node.arguments;
+      if (!Array.isArray(args)) return [];
+      return args.flatMap((argument) =>
+        isNode(argument) && !isType(argument, "ArgumentPlaceholder")
+          ? resolveLiterals(argument, bindings, seen, functions)
+          : [],
       );
     }
     return [];
   }
 
-  if (t.isJSXExpressionContainer(node)) {
-    return resolveLiterals(node.expression, bindings, seen, functions);
+  if (isType(node, "JSXExpressionContainer")) {
+    return resolveLiterals(asNode(node.expression), bindings, seen, functions);
   }
 
   return [];
 }
 
 function resolveObjectLiterals(
-  node: t.ObjectExpression,
-  bindings: Map<string, t.Node>,
+  node: Node,
+  bindings: Map<string, Node>,
   seen: Set<string>,
   functions: Set<string>,
 ): Literal[] {
   const out: Literal[] = [];
+  const properties = node.properties;
+  if (!Array.isArray(properties)) return out;
 
-  for (const property of node.properties) {
-    if (t.isSpreadElement(property)) {
-      out.push(...resolveLiterals(property.argument, bindings, seen, functions));
+  for (const property of properties) {
+    if (!isNode(property)) continue;
+    if (isType(property, "SpreadElement")) {
+      out.push(...resolveLiterals(asNode(property.argument), bindings, seen, functions));
       continue;
     }
-    if (!t.isObjectProperty(property)) continue;
+    if (!isType(property, "ObjectProperty")) continue;
 
     // A quoted key in a classnames-style object is a class.
-    if (!property.computed && t.isStringLiteral(property.key)) {
-      out.push({ offset: property.key.start ?? -1, value: property.key.value });
+    const key = asNode(property.key);
+    if (
+      key &&
+      property.computed !== true &&
+      isType(key, "StringLiteral") &&
+      typeof key.value === "string"
+    ) {
+      out.push({ offset: key.start ?? -1, value: key.value as string });
     }
 
-    out.push(...resolveLiterals(property.value as t.Node, bindings, seen, functions));
+    out.push(...resolveLiterals(asNode(property.value), bindings, seen, functions));
   }
 
   return out;
 }
 
-function jsxElementName(
-  name: t.JSXIdentifier | t.JSXMemberExpression | t.JSXNamespacedName,
-): string | null {
-  if (t.isJSXIdentifier(name)) return name.name;
-  if (t.isJSXMemberExpression(name)) {
-    const object = jsxElementName(name.object as t.JSXIdentifier | t.JSXMemberExpression);
-    return object ? `${object}.${name.property.name}` : name.property.name;
+function jsxElementName(name: Node | null | undefined): string | null {
+  if (!name) return null;
+  if (isType(name, "JSXIdentifier")) {
+    return typeof name.name === "string" ? (name.name as string) : null;
+  }
+  if (isType(name, "JSXMemberExpression")) {
+    const object = jsxElementName(asNode(name.object));
+    const property = asNode(name.property);
+    const propertyName =
+      property && isType(property, "JSXIdentifier") && typeof property.name === "string"
+        ? (property.name as string)
+        : null;
+    if (!propertyName) return null;
+    return object ? `${object}.${propertyName}` : propertyName;
   }
   return null;
 }
 
-function attributeExpression(attr: t.JSXAttribute): t.Node | null {
-  if (!attr.value) return null;
-  if (t.isStringLiteral(attr.value)) return attr.value;
-  if (t.isJSXExpressionContainer(attr.value) && !t.isJSXEmptyExpression(attr.value.expression)) {
-    return attr.value.expression;
+function attributeExpression(attr: Node): Node | null {
+  if (!isType(attr, "JSXAttribute")) return null;
+  const value = asNode(attr.value);
+  if (!value) return null;
+  if (isType(value, "StringLiteral")) return value;
+  if (isType(value, "JSXExpressionContainer")) {
+    const expression = asNode(value.expression);
+    if (expression && !isType(expression, "JSXEmptyExpression")) return expression;
   }
   return null;
 }
 
-function classPropertyValue(object: t.ObjectExpression): t.Node | null {
-  for (const property of object.properties) {
-    if (!t.isObjectProperty(property) || property.computed) continue;
-    const name = staticKeyName(property.key);
-    if (name && CLASS_PROP_NAMES.has(name)) return property.value as t.Node;
+function classPropertyValue(object: Node): Node | null {
+  const properties = object.properties;
+  if (!Array.isArray(properties)) return null;
+  for (const property of properties) {
+    if (!isNode(property)) continue;
+    if (!isType(property, "ObjectProperty") || property.computed === true) continue;
+    const name = staticKeyName(asNode(property.key));
+    if (name && CLASS_PROP_NAMES.has(name)) return asNode(property.value);
   }
   return null;
 }
 
-type SiteExpression = { expression: t.Node; component?: string };
+type SiteExpression = { expression: Node; component?: string };
 
-function collectExpressions(program: t.Node, functions: Set<string>): SiteExpression[] {
+function collectExpressions(program: Node, functions: Set<string>): SiteExpression[] {
   const expressions: SiteExpression[] = [];
 
   walk(program, (node) => {
-    if (t.isJSXOpeningElement(node)) {
-      const component = jsxElementName(node.name) ?? undefined;
-      for (const attr of node.attributes) {
-        if (t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name)) {
-          const name = attr.name.name;
-          if (!CLASS_PROP_NAMES.has(name)) continue;
+    if (isType(node, "JSXOpeningElement")) {
+      const component = jsxElementName(asNode(node.name)) ?? undefined;
+      const attributes = node.attributes;
+      if (!Array.isArray(attributes)) return;
+      for (const attr of attributes) {
+        if (!isNode(attr)) continue;
+        if (isType(attr, "JSXAttribute")) {
+          const attrName = asNode(attr.name);
+          const name =
+            attrName && isType(attrName, "JSXIdentifier") && typeof attrName.name === "string"
+              ? (attrName.name as string)
+              : null;
+          if (!name || !CLASS_PROP_NAMES.has(name)) continue;
           const expression = attributeExpression(attr);
           if (expression) expressions.push({ expression, component });
           continue;
         }
 
-        if (t.isJSXSpreadAttribute(attr) && t.isObjectExpression(attr.argument)) {
-          const expression = classPropertyValue(attr.argument);
-          if (expression) expressions.push({ expression, component });
+        if (isType(attr, "JSXSpreadAttribute")) {
+          const argument = asNode(attr.argument);
+          if (argument && isType(argument, "ObjectExpression")) {
+            const expression = classPropertyValue(argument);
+            if (expression) expressions.push({ expression, component });
+          }
         }
       }
       return;
     }
 
-    if (
-      t.isObjectProperty(node) &&
-      !node.computed &&
-      (t.isIdentifier(node.key) || t.isStringLiteral(node.key))
-    ) {
-      const name = staticKeyName(node.key);
+    if (isType(node, "ObjectProperty") && node.computed !== true) {
+      const name = staticKeyName(asNode(node.key));
       if (name && CLASS_PROP_NAMES.has(name)) {
-        expressions.push({ expression: node.value as t.Node });
+        const value = asNode(node.value);
+        if (value) expressions.push({ expression: value });
       }
       return;
     }
 
-    if (
-      t.isCallExpression(node) &&
-      t.isIdentifier(node.callee) &&
-      functions.has(node.callee.name)
-    ) {
-      for (const argument of node.arguments) {
-        if (!t.isArgumentPlaceholder(argument)) expressions.push({ expression: argument });
+    if (isType(node, "CallExpression")) {
+      const callee = asNode(node.callee);
+      const calleeName =
+        callee && isType(callee, "Identifier") && typeof callee.name === "string"
+          ? (callee.name as string)
+          : null;
+      if (calleeName && functions.has(calleeName)) {
+        const args = node.arguments;
+        if (!Array.isArray(args)) return;
+        for (const argument of args) {
+          if (isNode(argument) && !isType(argument, "ArgumentPlaceholder")) {
+            expressions.push({ expression: argument });
+          }
+        }
       }
     }
   });
@@ -288,10 +365,14 @@ export function collectJsClassSites(
   const program = parseProgram(text);
   if (!program) return [];
 
-  const bindings = new Map<string, t.Node>();
+  const bindings = new Map<string, Node>();
   walk(program, (node) => {
-    if (t.isVariableDeclarator(node) && t.isIdentifier(node.id) && node.init) {
-      bindings.set(node.id.name, node.init);
+    if (isType(node, "VariableDeclarator")) {
+      const id = asNode(node.id);
+      const init = asNode(node.init);
+      if (id && isType(id, "Identifier") && typeof id.name === "string" && init) {
+        bindings.set(id.name as string, init);
+      }
     }
   });
 
