@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import fg from "fast-glob";
+import { findFiles } from "./glob.js";
 
 import {
   DEFAULT_IGNORED_PATH_SEGMENTS,
@@ -15,10 +15,9 @@ export async function resolveProjectInputFiles(
   const patterns = files && files.length > 0 ? files : DEFAULT_PATTERNS;
   const ignorePatterns = [...DEFAULT_IGNORE_PATTERNS, ...(ignore ?? [])];
 
-  const matched = await fg(patterns, {
-    absolute: true,
+  const matched = await findFiles(patterns, {
+    cwd: process.cwd(),
     dot: false,
-    onlyFiles: true,
     ignore: ignorePatterns,
   });
 

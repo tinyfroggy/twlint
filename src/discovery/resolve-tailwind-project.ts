@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import fg from "fast-glob";
+import { findFiles } from "./glob.js";
 
 import { resolveCssEntry } from "./resolve-css-entry.js";
 
@@ -82,11 +82,9 @@ export function resolveInstalledTailwind(rootDir: string): InstalledTailwind | n
 }
 
 export async function resolveTailwindConfig(rootDir: string): Promise<string | null> {
-  const candidates = await fg(CONFIG_FILE_NAMES, {
-    absolute: true,
-    dot: false,
-    onlyFiles: true,
+  const candidates = await findFiles(CONFIG_FILE_NAMES, {
     cwd: rootDir,
+    dot: false,
   });
 
   if (candidates.length === 0) {

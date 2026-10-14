@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { TextDocument } from "vscode-languageserver-textdocument";
+import { TextDocument } from "../src/core/text-document.js";
 import { getShorthandClassDiagnostics } from "../src/core/shorthand-classes.js";
 
 describe("getShorthandClassDiagnostics", () => {

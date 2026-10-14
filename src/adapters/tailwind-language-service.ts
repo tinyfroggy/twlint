@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { TextDocument } from "vscode-languageserver-textdocument";
+import { TextDocument } from "../core/text-document.js";
 
 import { loadDesignSystem } from "./tailwind-design-system.js";
 import { createV3ValidationState } from "./tailwind-v3-state.js";

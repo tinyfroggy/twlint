@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import fg from "fast-glob";
+import { findFiles } from "./glob.js";
 
 import { DEFAULT_CSS_ENTRY_PATTERNS, DEFAULT_IGNORE_PATTERNS } from "../constants.js";
 
@@ -17,12 +17,10 @@ const PREFERRED_CSS_ENTRY_NAMES = [
 
 export async function resolveCssEntry(rootDir?: string): Promise<string> {
   const cwd = rootDir || process.cwd();
-  const candidates = await fg(DEFAULT_CSS_ENTRY_PATTERNS, {
-    absolute: true,
-    dot: false,
-    onlyFiles: true,
-    ignore: DEFAULT_IGNORE_PATTERNS,
+  const candidates = await findFiles(DEFAULT_CSS_ENTRY_PATTERNS, {
     cwd,
+    dot: false,
+    ignore: DEFAULT_IGNORE_PATTERNS,
   });
 
   const tailwindEntries: string[] = [];

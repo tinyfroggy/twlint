@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { TextDocument } from "vscode-languageserver-textdocument";
+import type { TextDocument } from "../core/text-document.js";
 
 import { CUSTOM_RULES } from "../custom-rules/index.js";
 import { doValidate } from "../adapters/tailwind-language-service-api.js";

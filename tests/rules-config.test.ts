@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TextDocument } from "vscode-languageserver-textdocument";
+import { TextDocument } from "../src/core/text-document.js";
 
 import { RULE_CATALOG, RULE_IDS } from "../src/rules/catalog.js";
 import { configWarnings, resolveConfig } from "../src/rules/config.js";
